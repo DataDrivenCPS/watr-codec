@@ -1,0 +1,145 @@
+{
+    "PyPES2WaTr": {
+        "Network": {
+            "name": "",
+            "uri": "",
+            "reference": ""
+        },
+        "Facility": {
+            "name": "",
+            "uri": "",
+            "reference": ""
+        },
+        "Junction": {
+            "name": "",
+            "uri": "",
+            "reference": ""
+        },
+        "Valve": {
+            "name": "Valve",
+            "uri": "<urn:nawi-water-ontology#Valve>",
+            "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
+        },
+        "PRV": {
+            "name": "",
+            "uri": "",
+            "reference": ""
+        },
+        "ModularUnit": {
+            "name": "",
+            "uri": "",
+            "reference": ""
+        },
+        "Pump": {
+            "name": "Pump",
+            "uri": "<urn:nawi-water-ontology#Pump>",
+            "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
+        },
+        "Tank": {
+            "name": "",
+            "uri": "",
+            "reference": ""
+        },
+        "Reactor": {
+            "name": "",
+            "uri": "",
+            "reference": ""
+        },
+        "StaticMixer": {
+            "name": "",
+            "uri": "",
+            "reference": ""
+        },
+        "Reservoir": {
+            "name": "",
+            "uri": "",
+            "reference": ""
+        },
+        "Battery": {
+            "name": "",
+            "uri": "",
+            "reference": ""
+        },
+        "Digestion": {
+            "name": "",
+            "uri": "",
+            "reference": ""
+        },
+        "Pipe": {
+            "name": "Pipe",
+            "uri": "<http://data.ashrae.org/standard223#Pipe",
+            "reference": "https://docs.brickschema.org/modeling/connections.html"
+        },
+        "Cogeneration": {
+            "name": "Process-Cogeneration",
+            "uri": "<urn:nawi-water-ontology#Process-Cogeneration>",
+            "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/processtypes.ttl"
+        },
+        "Boiler": {
+            "name": "",
+            "uri": "",
+            "reference": ""
+        },
+        "Clarification": {
+            "name": "",
+            "uri": "",
+            "reference": ""
+        },
+        "Filtration": {
+            "name": "",
+            "uri": "",
+            "reference": ""
+        },
+        "ROMembrane": {
+            "name": "",
+            "uri": "",
+            "reference": ""
+        },
+        "Screening": {
+            "name": "",
+            "uri": "",
+            "reference": ""
+        },
+        "Conditioning": {
+            "name": "",
+            "uri": "",
+            "reference": ""
+        },
+        "Thickening": {
+            "name": "",
+            "uri": "",
+            "reference": ""
+        },
+        "Aeration": {
+            "name": "",
+            "uri": "",
+            "reference": ""
+        },
+        "Disinfection": {
+            "name": "",
+            "uri": "",
+            "reference": ""
+        },
+        "Chlorination": {
+            "name": "",
+            "uri": "",
+            "reference": ""
+        },
+        "UVSystem": {
+            "name": "",
+            "uri": "",
+            "reference": ""
+        },
+        "Flaring": {
+            "name": "Flare",
+            "uri": "<urn:nawi-water-ontology#Flare>",
+            "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
+        },
+        "Separator": {
+            "name": "Process-Separation",
+            "uri": "<urn:nawi-water-ontology#Process-Separation>",
+            "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/processtypes.ttl"
+        }
+    },
+    "WaTr2PyPES": {}
+}

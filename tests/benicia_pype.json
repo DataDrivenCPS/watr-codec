@@ -1,0 +1,385 @@
+{
+  "nodes": [
+    "Influent_Pump",
+    "Effluent_Pump",
+    "Flow_Return_Pump1",
+    "Flow_Return_Pump2",
+    "Sludge_Thickener",
+    "Chlorination_Chamber",
+    "conn-AS_Aeration_Basin-to-AS_Secondary_Sedimentation",
+    "conn-AS_Secondary_Sedimentation-to-Chlorination_Chamber",
+    "conn-Chlorination_Basin-to-Effluent_Pump",
+    "conn-Chlorination_Chamber-to-Chlorination_Basin",
+    "conn-Diurnal_Flow_Box-to-Flow_Return_Pump1",
+    "conn-Diurnal_Flow_Box-to-Flow_Return_Pump2",
+    "conn-Diurnal_Flow_Box-to-Storage_Basin",
+    "conn-Effluent_Pump-to-Storage_Basin",
+    "conn-Flow_Return_Pump1-to-Primary_Sedimentation_Junction",
+    "conn-Flow_Return_Pump2-to-Primary_Sedimentation",
+    "conn-Grinder-to-Primary_Sedimentation",
+    "conn-Grit_Chamber-to-Grinder",
+    "conn-Influent_Pump-to-Screen",
+    "conn-Primary_Sedimentation-to-Primary_Sedimentation_Junction",
+    "conn-Primary_Sedimentation-to-Sludge_Thickener",
+    "conn-Primary_Sedimentation_Junction-to-AS_Aeration_Basin",
+    "conn-Primary_Sedimentation_Junction-to-RBC_Unit",
+    "conn-Primary_Sedimentation_Junction-to-Sluice_Gate",
+    "conn-RBC_Secondary_Sedimentation-to-Chlorination_Chamber",
+    "conn-RBC_Unit-to-RBC_Secondary_Sedimentation",
+    "conn-Screen-to-Grit_Chamber",
+    "conn-Sludge_Digester-to-Dewatering_Unit",
+    "conn-Sludge_Thickener-to-Sludge_Digester",
+    "conn-Sluice_Gate-to-Diurnal_Flow_Box",
+    "conn-Storage_Basin-to-Diurnal_Flow_Box",
+    "conn-Wet_Weather_Screen-to-Storage_Basin",
+    "Diurnal_Flow_Box",
+    "Primary_Sedimentation_Junction"
+  ],
+  "connections": [
+    "conn_Flow_Return_Pump1_to_Primary_Sedimentation_Junction",
+    "conn_Diurnal_Flow_Box_to_Flow_Return_Pump1",
+    "conn_Diurnal_Flow_Box_to_Flow_Return_Pump2",
+    "conn_Influent_Pump_to_conn-Influent_Pump-to-Screen",
+    "conn_Primary_Sedimentation_Junction_to_conn-Primary_Sedimentation_Junction-to-AS_Aeration_Basin",
+    "conn_Chlorination_Chamber_to_conn-AS_Secondary_Sedimentation-to-Chlorination_Chamber",
+    "conn_Effluent_Pump_to_conn-Chlorination_Basin-to-Effluent_Pump",
+    "conn_Chlorination_Chamber_to_conn-Chlorination_Chamber-to-Chlorination_Basin",
+    "conn_Effluent_Pump_to_conn-Effluent_Pump-to-Storage_Basin",
+    "conn_Flow_Return_Pump1_to_conn-Diurnal_Flow_Box-to-Flow_Return_Pump1",
+    "conn_Diurnal_Flow_Box_to_conn-Diurnal_Flow_Box-to-Flow_Return_Pump1",
+    "conn_Flow_Return_Pump1_to_conn-Flow_Return_Pump1-to-Primary_Sedimentation_Junction",
+    "conn_Primary_Sedimentation_Junction_to_conn-Flow_Return_Pump1-to-Primary_Sedimentation_Junction",
+    "conn_Flow_Return_Pump2_to_conn-Diurnal_Flow_Box-to-Flow_Return_Pump2",
+    "conn_Diurnal_Flow_Box_to_conn-Diurnal_Flow_Box-to-Flow_Return_Pump2",
+    "conn_Flow_Return_Pump2_to_conn-Flow_Return_Pump2-to-Primary_Sedimentation",
+    "conn_Chlorination_Chamber_to_conn-RBC_Secondary_Sedimentation-to-Chlorination_Chamber",
+    "conn_Primary_Sedimentation_Junction_to_conn-Primary_Sedimentation_Junction-to-RBC_Unit",
+    "conn_Sludge_Thickener_to_conn-Sludge_Thickener-to-Sludge_Digester",
+    "conn_Sludge_Thickener_to_conn-Primary_Sedimentation-to-Sludge_Thickener",
+    "conn_Primary_Sedimentation_Junction_to_conn-Primary_Sedimentation_Junction-to-Sluice_Gate",
+    "conn_Diurnal_Flow_Box_to_conn-Sluice_Gate-to-Diurnal_Flow_Box",
+    "conn_Primary_Sedimentation_Junction_to_conn-Primary_Sedimentation-to-Primary_Sedimentation_Junction",
+    "conn_Diurnal_Flow_Box_to_conn-Diurnal_Flow_Box-to-Storage_Basin",
+    "conn_Diurnal_Flow_Box_to_conn-Storage_Basin-to-Diurnal_Flow_Box"
+  ],
+  "Influent_Pump": {
+    "id": "Influent_Pump",
+    "type": "Pump",
+    "tags": {}
+  },
+  "Effluent_Pump": {
+    "id": "Effluent_Pump",
+    "type": "Pump",
+    "tags": {}
+  },
+  "Flow_Return_Pump1": {
+    "id": "Flow_Return_Pump1",
+    "type": "Pump",
+    "tags": {}
+  },
+  "Flow_Return_Pump2": {
+    "id": "Flow_Return_Pump2",
+    "type": "Pump",
+    "tags": {}
+  },
+  "Sludge_Thickener": {
+    "id": "Sludge_Thickener",
+    "type": "Thickening",
+    "tags": {}
+  },
+  "Chlorination_Chamber": {
+    "id": "Chlorination_Chamber",
+    "type": "StaticMixer",
+    "tags": {}
+  },
+  "conn-AS_Aeration_Basin-to-AS_Secondary_Sedimentation": {
+    "id": "conn-AS_Aeration_Basin-to-AS_Secondary_Sedimentation",
+    "type": "Pipe",
+    "tags": {}
+  },
+  "conn-AS_Secondary_Sedimentation-to-Chlorination_Chamber": {
+    "id": "conn-AS_Secondary_Sedimentation-to-Chlorination_Chamber",
+    "type": "Pipe",
+    "tags": {}
+  },
+  "conn-Chlorination_Basin-to-Effluent_Pump": {
+    "id": "conn-Chlorination_Basin-to-Effluent_Pump",
+    "type": "Pipe",
+    "tags": {}
+  },
+  "conn-Chlorination_Chamber-to-Chlorination_Basin": {
+    "id": "conn-Chlorination_Chamber-to-Chlorination_Basin",
+    "type": "Pipe",
+    "tags": {}
+  },
+  "conn-Diurnal_Flow_Box-to-Flow_Return_Pump1": {
+    "id": "conn-Diurnal_Flow_Box-to-Flow_Return_Pump1",
+    "type": "Pipe",
+    "tags": {}
+  },
+  "conn-Diurnal_Flow_Box-to-Flow_Return_Pump2": {
+    "id": "conn-Diurnal_Flow_Box-to-Flow_Return_Pump2",
+    "type": "Pipe",
+    "tags": {}
+  },
+  "conn-Diurnal_Flow_Box-to-Storage_Basin": {
+    "id": "conn-Diurnal_Flow_Box-to-Storage_Basin",
+    "type": "Pipe",
+    "tags": {}
+  },
+  "conn-Effluent_Pump-to-Storage_Basin": {
+    "id": "conn-Effluent_Pump-to-Storage_Basin",
+    "type": "Pipe",
+    "tags": {}
+  },
+  "conn-Flow_Return_Pump1-to-Primary_Sedimentation_Junction": {
+    "id": "conn-Flow_Return_Pump1-to-Primary_Sedimentation_Junction",
+    "type": "Pipe",
+    "tags": {}
+  },
+  "conn-Flow_Return_Pump2-to-Primary_Sedimentation": {
+    "id": "conn-Flow_Return_Pump2-to-Primary_Sedimentation",
+    "type": "Pipe",
+    "tags": {}
+  },
+  "conn-Grinder-to-Primary_Sedimentation": {
+    "id": "conn-Grinder-to-Primary_Sedimentation",
+    "type": "Pipe",
+    "tags": {}
+  },
+  "conn-Grit_Chamber-to-Grinder": {
+    "id": "conn-Grit_Chamber-to-Grinder",
+    "type": "Pipe",
+    "tags": {}
+  },
+  "conn-Influent_Pump-to-Screen": {
+    "id": "conn-Influent_Pump-to-Screen",
+    "type": "Pipe",
+    "tags": {}
+  },
+  "conn-Primary_Sedimentation-to-Primary_Sedimentation_Junction": {
+    "id": "conn-Primary_Sedimentation-to-Primary_Sedimentation_Junction",
+    "type": "Pipe",
+    "tags": {}
+  },
+  "conn-Primary_Sedimentation-to-Sludge_Thickener": {
+    "id": "conn-Primary_Sedimentation-to-Sludge_Thickener",
+    "type": "Pipe",
+    "tags": {}
+  },
+  "conn-Primary_Sedimentation_Junction-to-AS_Aeration_Basin": {
+    "id": "conn-Primary_Sedimentation_Junction-to-AS_Aeration_Basin",
+    "type": "Pipe",
+    "tags": {}
+  },
+  "conn-Primary_Sedimentation_Junction-to-RBC_Unit": {
+    "id": "conn-Primary_Sedimentation_Junction-to-RBC_Unit",
+    "type": "Pipe",
+    "tags": {}
+  },
+  "conn-Primary_Sedimentation_Junction-to-Sluice_Gate": {
+    "id": "conn-Primary_Sedimentation_Junction-to-Sluice_Gate",
+    "type": "Pipe",
+    "tags": {}
+  },
+  "conn-RBC_Secondary_Sedimentation-to-Chlorination_Chamber": {
+    "id": "conn-RBC_Secondary_Sedimentation-to-Chlorination_Chamber",
+    "type": "Pipe",
+    "tags": {}
+  },
+  "conn-RBC_Unit-to-RBC_Secondary_Sedimentation": {
+    "id": "conn-RBC_Unit-to-RBC_Secondary_Sedimentation",
+    "type": "Pipe",
+    "tags": {}
+  },
+  "conn-Screen-to-Grit_Chamber": {
+    "id": "conn-Screen-to-Grit_Chamber",
+    "type": "Pipe",
+    "tags": {}
+  },
+  "conn-Sludge_Digester-to-Dewatering_Unit": {
+    "id": "conn-Sludge_Digester-to-Dewatering_Unit",
+    "type": "Pipe",
+    "tags": {}
+  },
+  "conn-Sludge_Thickener-to-Sludge_Digester": {
+    "id": "conn-Sludge_Thickener-to-Sludge_Digester",
+    "type": "Pipe",
+    "tags": {}
+  },
+  "conn-Sluice_Gate-to-Diurnal_Flow_Box": {
+    "id": "conn-Sluice_Gate-to-Diurnal_Flow_Box",
+    "type": "Pipe",
+    "tags": {}
+  },
+  "conn-Storage_Basin-to-Diurnal_Flow_Box": {
+    "id": "conn-Storage_Basin-to-Diurnal_Flow_Box",
+    "type": "Pipe",
+    "tags": {}
+  },
+  "conn-Wet_Weather_Screen-to-Storage_Basin": {
+    "id": "conn-Wet_Weather_Screen-to-Storage_Basin",
+    "type": "Pipe",
+    "tags": {}
+  },
+  "Diurnal_Flow_Box": {
+    "id": "Diurnal_Flow_Box",
+    "type": "Tank",
+    "tags": {}
+  },
+  "Primary_Sedimentation_Junction": {
+    "id": "Primary_Sedimentation_Junction",
+    "type": "Junction",
+    "tags": {}
+  },
+  "conn_Flow_Return_Pump1_to_Primary_Sedimentation_Junction": {
+    "id": "conn_Flow_Return_Pump1_to_Primary_Sedimentation_Junction",
+    "source": "Flow_Return_Pump1",
+    "destination": "Primary_Sedimentation_Junction",
+    "type": "Pipe"
+  },
+  "conn_Diurnal_Flow_Box_to_Flow_Return_Pump1": {
+    "id": "conn_Diurnal_Flow_Box_to_Flow_Return_Pump1",
+    "source": "Diurnal_Flow_Box",
+    "destination": "Flow_Return_Pump1",
+    "type": "Pipe"
+  },
+  "conn_Diurnal_Flow_Box_to_Flow_Return_Pump2": {
+    "id": "conn_Diurnal_Flow_Box_to_Flow_Return_Pump2",
+    "source": "Diurnal_Flow_Box",
+    "destination": "Flow_Return_Pump2",
+    "type": "Pipe"
+  },
+  "conn_Influent_Pump_to_conn-Influent_Pump-to-Screen": {
+    "id": "conn_Influent_Pump_to_conn-Influent_Pump-to-Screen",
+    "source": "Influent_Pump",
+    "destination": "conn-Influent_Pump-to-Screen",
+    "type": "Pipe"
+  },
+  "conn_Primary_Sedimentation_Junction_to_conn-Primary_Sedimentation_Junction-to-AS_Aeration_Basin": {
+    "id": "conn_Primary_Sedimentation_Junction_to_conn-Primary_Sedimentation_Junction-to-AS_Aeration_Basin",
+    "source": "Primary_Sedimentation_Junction",
+    "destination": "conn-Primary_Sedimentation_Junction-to-AS_Aeration_Basin",
+    "type": "Pipe"
+  },
+  "conn_Chlorination_Chamber_to_conn-AS_Secondary_Sedimentation-to-Chlorination_Chamber": {
+    "id": "conn_Chlorination_Chamber_to_conn-AS_Secondary_Sedimentation-to-Chlorination_Chamber",
+    "source": "Chlorination_Chamber",
+    "destination": "conn-AS_Secondary_Sedimentation-to-Chlorination_Chamber",
+    "type": "Pipe"
+  },
+  "conn_Effluent_Pump_to_conn-Chlorination_Basin-to-Effluent_Pump": {
+    "id": "conn_Effluent_Pump_to_conn-Chlorination_Basin-to-Effluent_Pump",
+    "source": "Effluent_Pump",
+    "destination": "conn-Chlorination_Basin-to-Effluent_Pump",
+    "type": "Pipe"
+  },
+  "conn_Chlorination_Chamber_to_conn-Chlorination_Chamber-to-Chlorination_Basin": {
+    "id": "conn_Chlorination_Chamber_to_conn-Chlorination_Chamber-to-Chlorination_Basin",
+    "source": "Chlorination_Chamber",
+    "destination": "conn-Chlorination_Chamber-to-Chlorination_Basin",
+    "type": "Pipe"
+  },
+  "conn_Effluent_Pump_to_conn-Effluent_Pump-to-Storage_Basin": {
+    "id": "conn_Effluent_Pump_to_conn-Effluent_Pump-to-Storage_Basin",
+    "source": "Effluent_Pump",
+    "destination": "conn-Effluent_Pump-to-Storage_Basin",
+    "type": "Pipe"
+  },
+  "conn_Flow_Return_Pump1_to_conn-Diurnal_Flow_Box-to-Flow_Return_Pump1": {
+    "id": "conn_Flow_Return_Pump1_to_conn-Diurnal_Flow_Box-to-Flow_Return_Pump1",
+    "source": "Flow_Return_Pump1",
+    "destination": "conn-Diurnal_Flow_Box-to-Flow_Return_Pump1",
+    "type": "Pipe"
+  },
+  "conn_Diurnal_Flow_Box_to_conn-Diurnal_Flow_Box-to-Flow_Return_Pump1": {
+    "id": "conn_Diurnal_Flow_Box_to_conn-Diurnal_Flow_Box-to-Flow_Return_Pump1",
+    "source": "Diurnal_Flow_Box",
+    "destination": "conn-Diurnal_Flow_Box-to-Flow_Return_Pump1",
+    "type": "Pipe"
+  },
+  "conn_Flow_Return_Pump1_to_conn-Flow_Return_Pump1-to-Primary_Sedimentation_Junction": {
+    "id": "conn_Flow_Return_Pump1_to_conn-Flow_Return_Pump1-to-Primary_Sedimentation_Junction",
+    "source": "Flow_Return_Pump1",
+    "destination": "conn-Flow_Return_Pump1-to-Primary_Sedimentation_Junction",
+    "type": "Pipe"
+  },
+  "conn_Primary_Sedimentation_Junction_to_conn-Flow_Return_Pump1-to-Primary_Sedimentation_Junction": {
+    "id": "conn_Primary_Sedimentation_Junction_to_conn-Flow_Return_Pump1-to-Primary_Sedimentation_Junction",
+    "source": "Primary_Sedimentation_Junction",
+    "destination": "conn-Flow_Return_Pump1-to-Primary_Sedimentation_Junction",
+    "type": "Pipe"
+  },
+  "conn_Flow_Return_Pump2_to_conn-Diurnal_Flow_Box-to-Flow_Return_Pump2": {
+    "id": "conn_Flow_Return_Pump2_to_conn-Diurnal_Flow_Box-to-Flow_Return_Pump2",
+    "source": "Flow_Return_Pump2",
+    "destination": "conn-Diurnal_Flow_Box-to-Flow_Return_Pump2",
+    "type": "Pipe"
+  },
+  "conn_Diurnal_Flow_Box_to_conn-Diurnal_Flow_Box-to-Flow_Return_Pump2": {
+    "id": "conn_Diurnal_Flow_Box_to_conn-Diurnal_Flow_Box-to-Flow_Return_Pump2",
+    "source": "Diurnal_Flow_Box",
+    "destination": "conn-Diurnal_Flow_Box-to-Flow_Return_Pump2",
+    "type": "Pipe"
+  },
+  "conn_Flow_Return_Pump2_to_conn-Flow_Return_Pump2-to-Primary_Sedimentation": {
+    "id": "conn_Flow_Return_Pump2_to_conn-Flow_Return_Pump2-to-Primary_Sedimentation",
+    "source": "Flow_Return_Pump2",
+    "destination": "conn-Flow_Return_Pump2-to-Primary_Sedimentation",
+    "type": "Pipe"
+  },
+  "conn_Chlorination_Chamber_to_conn-RBC_Secondary_Sedimentation-to-Chlorination_Chamber": {
+    "id": "conn_Chlorination_Chamber_to_conn-RBC_Secondary_Sedimentation-to-Chlorination_Chamber",
+    "source": "Chlorination_Chamber",
+    "destination": "conn-RBC_Secondary_Sedimentation-to-Chlorination_Chamber",
+    "type": "Pipe"
+  },
+  "conn_Primary_Sedimentation_Junction_to_conn-Primary_Sedimentation_Junction-to-RBC_Unit": {
+    "id": "conn_Primary_Sedimentation_Junction_to_conn-Primary_Sedimentation_Junction-to-RBC_Unit",
+    "source": "Primary_Sedimentation_Junction",
+    "destination": "conn-Primary_Sedimentation_Junction-to-RBC_Unit",
+    "type": "Pipe"
+  },
+  "conn_Sludge_Thickener_to_conn-Sludge_Thickener-to-Sludge_Digester": {
+    "id": "conn_Sludge_Thickener_to_conn-Sludge_Thickener-to-Sludge_Digester",
+    "source": "Sludge_Thickener",
+    "destination": "conn-Sludge_Thickener-to-Sludge_Digester",
+    "type": "Pipe"
+  },
+  "conn_Sludge_Thickener_to_conn-Primary_Sedimentation-to-Sludge_Thickener": {
+    "id": "conn_Sludge_Thickener_to_conn-Primary_Sedimentation-to-Sludge_Thickener",
+    "source": "Sludge_Thickener",
+    "destination": "conn-Primary_Sedimentation-to-Sludge_Thickener",
+    "type": "Pipe"
+  },
+  "conn_Primary_Sedimentation_Junction_to_conn-Primary_Sedimentation_Junction-to-Sluice_Gate": {
+    "id": "conn_Primary_Sedimentation_Junction_to_conn-Primary_Sedimentation_Junction-to-Sluice_Gate",
+    "source": "Primary_Sedimentation_Junction",
+    "destination": "conn-Primary_Sedimentation_Junction-to-Sluice_Gate",
+    "type": "Pipe"
+  },
+  "conn_Diurnal_Flow_Box_to_conn-Sluice_Gate-to-Diurnal_Flow_Box": {
+    "id": "conn_Diurnal_Flow_Box_to_conn-Sluice_Gate-to-Diurnal_Flow_Box",
+    "source": "Diurnal_Flow_Box",
+    "destination": "conn-Sluice_Gate-to-Diurnal_Flow_Box",
+    "type": "Pipe"
+  },
+  "conn_Primary_Sedimentation_Junction_to_conn-Primary_Sedimentation-to-Primary_Sedimentation_Junction": {
+    "id": "conn_Primary_Sedimentation_Junction_to_conn-Primary_Sedimentation-to-Primary_Sedimentation_Junction",
+    "source": "Primary_Sedimentation_Junction",
+    "destination": "conn-Primary_Sedimentation-to-Primary_Sedimentation_Junction",
+    "type": "Pipe"
+  },
+  "conn_Diurnal_Flow_Box_to_conn-Diurnal_Flow_Box-to-Storage_Basin": {
+    "id": "conn_Diurnal_Flow_Box_to_conn-Diurnal_Flow_Box-to-Storage_Basin",
+    "source": "Diurnal_Flow_Box",
+    "destination": "conn-Diurnal_Flow_Box-to-Storage_Basin",
+    "type": "Pipe"
+  },
+  "conn_Diurnal_Flow_Box_to_conn-Storage_Basin-to-Diurnal_Flow_Box": {
+    "id": "conn_Diurnal_Flow_Box_to_conn-Storage_Basin-to-Diurnal_Flow_Box",
+    "source": "Diurnal_Flow_Box",
+    "destination": "conn-Storage_Basin-to-Diurnal_Flow_Box",
+    "type": "Pipe"
+  }
+}

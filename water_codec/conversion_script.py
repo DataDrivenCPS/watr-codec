@@ -1,5 +1,5 @@
-# conversion_script.py
-
+import json
+import os
 from typing import List, Dict, Any, Optional, Union
 
 class PypeTag:
@@ -83,7 +83,6 @@ class PypeToWatrConverter:
     }
 
     # Define which WaTr types are Process and which are Equipment for clarity
-    # Process types taken from: https://github.com/DataDrivenCPS/water-ontology/blob/main/water/processtypes.ttl
     WATR_PROCESS_TYPES = [
         "Process-Separation", "Process-Elutriation", "Process-Screening", "Process-Sedimentation",
         "Process-Filtration", "Process-MediaFiltration", "Process-SlowSandFiltration",
@@ -109,7 +108,7 @@ class PypeToWatrConverter:
         "Process-BiologicallyActiveFiltration", "Process-MembraneBioreactor",
         "Process-Digestion", "Process-AnaerobicDigestion", "Process-AerobicDigestion"
     ]
-    # Equipment types based on: https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl
+    
     WATR_EQUIPMENT_TYPES = [
         "AerationBasin", "AerobicDigester", "AnaerobicDigester", "CoagulationBasin",
         "FlocculationBasin", "SedimentationTank", "Filter", "MicrofiltrationUnit",
@@ -120,25 +119,31 @@ class PypeToWatrConverter:
         "Aerator", "ChlorineDosingSystem", "CoagulantDosingSystem", "Ozonator", "Softener", "UVReactor"
     ]
 
-    # Substance mapping based on: https://github.com/DataDrivenCPS/water-ontology/blob/main/water/substances.ttl
-    WATR_SUBSTANCES = {
-        "ammonia": "Ammonium",
-        "chloride": "Chloride",
-        "arsenic": "Arsenic",
-        "nitrate": "Nitrate",
-        "phosphate": "Phosphate",
-        "sludge": "Sludge",
-        "biogas": "Biogas",
-        "permeate": "Permeate",
-        "brine": "Brine",
-        "seawater": "Seawater"
-    }
-
-    def __init__(self):
+    def __init__(self, mapping_path: Optional[str] = None):
         self.watr_processes: Dict[str, WatrProcess] = {}
         self.watr_equipment: Dict[str, WatrEquipment] = {}
         self.watr_streams: Dict[str, WatrStream] = {}
         self.watr_substances: Dict[str, WatrSubstance] = {}
+        
+        if mapping_path and os.path.exists(mapping_path):
+            self._load_mapping(mapping_path)
+
+    def _load_mapping(self, mapping_path: str):
+        try:
+            with open(mapping_path, 'r') as f:
+                mapping_data = json.load(f)
+            pypes_to_watr = mapping_data.get("PyPES2WaTr", {})
+            for pype_type, watr_info in pypes_to_watr.items():
+                watr_name = watr_info.get("name")
+                if watr_name:
+                    self.TYPE_MAPPING[pype_type] = watr_name
+                    # Try to infer if it's a process or equipment
+                    if watr_name.startswith("Process-") and watr_name not in self.WATR_PROCESS_TYPES:
+                        self.WATR_PROCESS_TYPES.append(watr_name)
+                    elif watr_name not in self.WATR_EQUIPMENT_TYPES and watr_name not in self.WATR_PROCESS_TYPES:
+                        self.WATR_EQUIPMENT_TYPES.append(watr_name)
+        except Exception as e:
+            print(f"Error loading mapping: {e}")
 
     def _convert_pype_tag_to_watr_property(self, pype_tag: PypeTag, entity_id: str) -> WatrProperty:
         prop_id = f"{entity_id}_prop_{pype_tag.key}"
@@ -156,8 +161,8 @@ class PypeToWatrConverter:
         elif watr_type_str in self.WATR_EQUIPMENT_TYPES:
             watr_entity = WatrEquipment(id=watr_id, name=watr_name, type=watr_type_str)
         else:
-            print(f"Warning: PypeNode type '{pype_node.type}' (mapped to '{watr_type_str}') not found. Defaulting to Equipment.")
-            watr_entity = WatrEquipment(id=watr_id, name=watr_name, type="Equipment")
+            print(f"Warning: PypeNode type '{pype_node.type}' (mapped to '{watr_type_str}') not found in known types. Defaulting to Equipment.")
+            watr_entity = WatrEquipment(id=watr_id, name=watr_name, type=watr_type_str if watr_type_str else "Equipment")
 
         if watr_entity:
             for key, pype_tag in pype_node.tags.items():
@@ -203,6 +208,8 @@ class WatrTTLExporter:
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix nawi: <urn:nawi-water-ontology#> .
+@prefix s223: <http://data.ashrae.org/standard223#> .
 """
 
     def export(self, watr_entities: Dict[str, Any]) -> str:
@@ -222,10 +229,119 @@ class WatrTTLExporter:
             ttl += f"    rdfs:label \"{strm.name}\" .\n\n"
         return ttl
 
-def convert_pype_to_watr(pype_nodes: List[PypeNode], pype_connections: List[PypeConnection]) -> Dict[str, Any]:
-    converter = PypeToWatrConverter()
+def convert_pype_to_watr(pype_nodes: List[PypeNode], pype_connections: List[PypeConnection], mapping_path: Optional[str] = None) -> Dict[str, Any]:
+    converter = PypeToWatrConverter(mapping_path)
     return converter.convert(pype_nodes, pype_connections)
 
 def export_watr_to_ttl(watr_entities: Dict[str, Any]) -> str:
     exporter = WatrTTLExporter()
     return exporter.export(watr_entities)
+
+try:
+    import rdflib
+    from rdflib import Graph, Namespace, URIRef, Literal, RDF, RDFS
+except ImportError:
+    rdflib = None
+
+class WatrToPypeConverter:
+    def __init__(self, mapping_path: Optional[str] = None):
+        self.mapping_path = mapping_path
+        self.reverse_mapping = {}
+        if mapping_path and os.path.exists(mapping_path):
+            self._load_reverse_mapping(mapping_path)
+
+    def _load_reverse_mapping(self, mapping_path: str):
+        try:
+            with open(mapping_path, 'r') as f:
+                mapping_data = json.load(f)
+            pypes_to_watr = mapping_data.get("PyPES2WaTr", {})
+            for pype_type, watr_info in pypes_to_watr.items():
+                watr_name = watr_info.get("name")
+                if watr_name:
+                    self.reverse_mapping[watr_name] = pype_type
+                # Also try to map from URI if present
+                uri = watr_info.get("uri")
+                if uri:
+                    # uri is usually "<uri>", strip <>
+                    uri_stripped = uri.strip("<>")
+                    self.reverse_mapping[uri_stripped] = pype_type
+        except Exception as e:
+            print(f"Error loading reverse mapping: {e}")
+
+    def convert_ttl_to_pype(self, ttl_filepath: str) -> Dict[str, Any]:
+        if rdflib is None:
+            print("Error: rdflib is not installed. Cannot parse TTL.")
+            return {"nodes": [], "connections": []}
+
+        g = Graph()
+        g.parse(ttl_filepath, format="turtle")
+
+        # Define namespaces seen in benicia-model.ttl
+        NAWI = Namespace("urn:nawi-water-ontology#")
+        S223 = Namespace("http://data.ashrae.org/standard223#")
+        WATR = Namespace("https://datadrivencps.org/water-ontology#")
+        WBS = Namespace("urn:ex/")
+
+        nodes = []
+        connections = []
+        node_ids = []
+        conn_ids = []
+
+        # Find all subjects that have a type
+        for s, p, o in g.triples((None, RDF.type, None)):
+            # Ignore prefixes themselves
+            if isinstance(s, URIRef) and s == WBS[""]:
+                continue
+            
+            # Map type to PyPES type
+            watr_type = None
+            if isinstance(o, URIRef):
+                # Try full URI or just local name
+                if str(o) in self.reverse_mapping:
+                    watr_type = self.reverse_mapping[str(o)]
+                elif str(o).split("#")[-1] in self.reverse_mapping:
+                    watr_type = self.reverse_mapping[str(o).split("#")[-1]]
+                elif str(o).split("/")[-1] in self.reverse_mapping:
+                    watr_type = self.reverse_mapping[str(o).split("/")[-1]]
+
+            if watr_type:
+                node_id = str(s).split("#")[-1].split("/")[-1]
+                if node_id not in node_ids:
+                    node_ids.append(node_id)
+                    
+                    # Basic node extraction
+                    node_data = {
+                        "id": node_id,
+                        "type": watr_type,
+                        "tags": {}
+                    }
+                    
+                    # Try to find label
+                    label = g.value(s, RDFS.label)
+                    if label:
+                        node_data["name"] = str(label)
+                        
+                    nodes.append(node_data)
+
+        # Basic connection extraction from s223 properties
+        connection_predicates = [S223.connectedTo, S223.connected, S223.connectedThrough]
+        for pred in connection_predicates:
+            for s, p, o in g.triples((None, pred, None)):
+                src_id = str(s).split("#")[-1].split("/")[-1]
+                dst_id = str(o).split("#")[-1].split("/")[-1]
+                
+                # Check if they are valid node IDs we found
+                if src_id in node_ids and dst_id in node_ids:
+                    conn_id = f"conn_{src_id}_to_{dst_id}"
+                    if conn_id not in conn_ids:
+                        conn_ids.append(conn_id)
+                        connections.append({
+                            "id": conn_id,
+                            "source": src_id,
+                            "destination": dst_id,
+                            "type": "Pipe"
+                        })
+                # If o is a connection object (connectedThrough), we might need more logic
+                # but for now we just try to link subjects and objects directly if they are nodes.
+
+        return {"nodes": node_ids, "connections": conn_ids, "data": {node["id"]: node for node in nodes}, "connection_data": {conn["id"]: conn for conn in connections}}

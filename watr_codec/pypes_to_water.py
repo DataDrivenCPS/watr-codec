@@ -9,14 +9,13 @@ class PyPES2WaTr:
         self.property_dict = {}
 
     def convert_units(self, units: pint.Unit):
-        # TODO: implement function for converting units from Pint to QUDT
-        pass
+        units_dict = self.mapping["PyPES2WaTr"]["units"][str(units)]
+        # TODO: parse this string into something more useful
 
     def convert_tag_type(self, tag_type: pypes.tag.TagType):
-        # TODO: implement function for converting units from PyPES to QUDT
-        # also return true/false for quantity vs. enum kind
+        # TODO: implement function for converting tag type from PyPES to QUDT
         # This should rely on a PyPES2WaTr mapping that is for tags not nodes
-        # TODO: nest PyPES2WaTr JSON
+        # also return true/false for quantity vs. enum kind
         pass
 
     def translate_tag(self, tag: pypes.Tag):

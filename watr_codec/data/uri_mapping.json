@@ -1,0 +1,9 @@
+{
+    "watr": "<urn:nawi-water-ontology#> ",
+    "owl": "<http://www.w3.org/2002/07/owl#>",
+    "rec": "<https://w3id.org/rec#>",
+    "qudt": "<http://qudt.org/schema/qudt/>",
+    "qudtqk": "<http://qudt.org/vocab/quantitykind/>",
+    "s223": "<http://data.ashrae.org/standard223#>",
+    "unit": "<http://qudt.org/vocab/unit/>"
+}

@@ -18,8 +18,7 @@
     "CirculationPumpToSWRO",
     "SWROToOutput"
   ],
-  "virtual_tags": {
-  },
+  "virtual_tags": {},
   "Input": {
     "type": "Tank", 
     "elevation": null,

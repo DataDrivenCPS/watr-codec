@@ -1,144 +1,293 @@
 {
     "PyPES2WaTr": {
-        "Network": {
-            "name": "Region",
-            "uri": "<https://w3id.org/rec#Region>",
-            "reference": "https://dev.realestatecore.io/ontology/Space/Region"
+        "nodes": {
+            "Network": {
+                "name": "Region",
+                "uri": "rec",
+                "reference": "https://dev.realestatecore.io/ontology/Space/Region"
+            },
+            "Facility": {
+                "name": "Building",
+                "uri": "rec",
+                "reference": "https://dev.realestatecore.io/ontology/Space/Architecture/Building/Building"
+            },
+            "Junction": {
+                "name": "Junction",
+                "uri": "s223",
+                "reference": "https://docs.brickschema.org/modeling/connections.html"
+            },
+            "Valve": {
+                "name": "Valve",
+                "uri": "watr",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
+            },
+            "PRV": {
+                "name": "PressureReducingValve",
+                "uri": "s223",
+                "reference": "https://docs.brickschema.org/modeling/connections.html"
+            },
+            "ModularUnit": {
+                "name": "Zone",
+                "uri": "rec",
+                "reference": "https://dev.realestatecore.io/ontology/Space/Architecture/Zone/Zone"
+            },
+            "Pump": {
+                "name": "Pump",
+                "uri": "watr",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
+            },
+            "Tank": {
+                "name": "Tank",
+                "uri": "watr",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
+            },
+            "Reactor": {
+                "name": "Reactor",
+                "uri": "watr",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
+            },
+            "StaticMixer": {
+                "name": "StaticMixer",
+                "uri": "watr",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
+            },
+            "Reservoir": {
+                "name": "Reservoir",
+                "uri": "watr",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
+            },
+            "Battery": {
+                "name": "Battery",
+                "uri": "watr",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
+            },
+            "Digestion": {
+                "name": "Process-Digestion",
+                "uri": "watr",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/processtypes.ttl"
+            },
+            "Cogeneration": {
+                "name": "Process-Cogeneration",
+                "uri": "watr",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/processtypes.ttl"
+            },
+            "Boiler": {
+                "name": "Boiler",
+                "uri": "watr",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
+            },
+            "Clarification": {
+                "name": "Process-Sedimentation",
+                "uri": "watr",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/processtypes.ttl"
+            },
+            "Filtration": {
+                "name": "Process-Filtration",
+                "uri": "watr",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/processtypes.ttl"
+            },
+            "ROMembrane": {
+                "name": "Process-ReverseOsmosis",
+                "uri": "watr",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/processtypes.ttl"
+            },
+            "Screening": {
+                "name": "Process-Screening",
+                "uri": "watr",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/processtypes.ttl"
+            },
+            "Conditioning": {
+                "name": "Conditioner",
+                "uri": "watr",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
+            },
+            "Thickening": {
+                "name": "Thickener",
+                "uri": "watr",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
+            },
+            "Aeration": {
+                "name": "Process-Aeration",
+                "uri": "watr",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/processtypes.ttl"
+            },
+            "Disinfection": {
+                "name": "Process-Disinfection",
+                "uri": "watr",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/processtypes.ttl"
+            },
+            "Chlorination": {
+                "name": "Process-Chlorination",
+                "uri": "watr",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/processtypes.ttl"
+            },
+            "UVSystem": {
+                "name": "Process-UVDisinfection",
+                "uri": "watr",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/processtypes.ttl"
+            },
+            "Flaring": {
+                "name": "Flare",
+                "uri": "watr",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
+            },
+            "Separator": {
+                "name": "Process-Separation",
+                "uri": "watr",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/processtypes.ttl"
+            }
         },
-        "Facility": {
-            "name": "Building",
-            "uri": "<https://w3id.org/rec#Building>",
-            "reference": "https://dev.realestatecore.io/ontology/Space/Architecture/Building/Building"
+        "connections": {
+            "Pipe": {
+                "name": "Pipe",
+                "uri": "s223",
+                "reference": "https://docs.brickschema.org/modeling/connections.html"
+            },
+            "Delivery": {},
+            "Wire": {
+                "name": "Wire",
+                "uri": "s223",
+                "reference": "https://docs.brickschema.org/modeling/connections.html"
+            },
+            "Wireless": {
+                "name": "EM",
+                "uri": "s223",
+                "refrenece": "https://explore.open223.info/#s223:EM"
+            }
         },
-        "Junction": {
-            "name": "Junction",
-            "uri": "<http://data.ashrae.org/standard223#Junction>",
-            "reference": "https://docs.brickschema.org/modeling/connections.html"
+        "tag_types": {
+            "Flow": {
+                "name": "VolumeFlowRate",
+                "uri": "qudtqk",
+                "reference": "http://qudt.org/vocab/quantitykind/VolumeFlowRate"
+            },
+            "Volume": {
+                "name": "Volume",
+                "uri": "qudtqk",
+                "reference": "http://qudt.org/vocab/quantitykind/Volume"
+            },
+            "Level": {
+                "name": "LiquidLevel",
+                "uri": "qudtqk",
+                "reference": "http://qudt.org/vocab/quantitykind/LiquidLevel"
+            },
+            "Pressure": {
+                "name": "Pressure",
+                "uri": "qudtqk",
+                "reference": "http://qudt.org/vocab/quantitykind/Pressure"
+            },
+            "Temperature": {
+                "name": "Pressure",
+                "uri": "qudtqk",
+                "reference": "http://qudt.org/vocab/quantitykind/Temperature"
+            },
+            "RunTime": {
+                "name": "Time",
+                "uri": "qudtqk",
+                "reference": "http://qudt.org/vocab/quantitykind/Time"
+            },
+            "RunStatus": {
+                "name": "EnumerationKind-Status",
+                "uri": "watr",
+                "reference": ""
+            },
+            "TSS": {
+                "name": "Concentration",
+                "uri": "qudtqk",
+                "reference": "http://qudt.org/vocab/quantitykind/Concentration",
+                "substance": "Constituent-SuspendedSolids",
+                "substance-uri": "watr",
+                "substance-reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/substances.ttl"
+            },
+            "VSS": {
+                "name": "Concentration",
+                "uri": "qudtqk",
+                "reference": "http://qudt.org/vocab/quantitykind/Concentration",
+                "substance": "Solids-VolatileSuspendedSolids",
+                "substance-uri": "watr",
+                "substance-reference": ""
+            },
+            "TDS": {},
+            "COD": {},
+            "BOD": {},
+            "pH": {
+                "name": "Acidity",
+                "uri": "qudtqk",
+                "reference": "https://qudt.org/vocab/quantitykind/Acidity"
+            },
+            "Conductivity": {
+                "name": "ElectricConductivity",
+                "uri": "qudtqk",
+                "reference": "https://qudt.org/vocab/quantitykind/ElectricConductivity"
+            },
+            "Turbidity": {
+                "name": "Turbidity",
+                "uri": "qudtqk",
+                "reference": "https://qudt.org/vocab/quantitykind/Turbidity"
+            },
+            "Rotation":  {
+                "name": "RotationalFrequency",
+                "uri": "qudtqk",
+                "reference": "https://qudt.org/vocab/quantitykind/RotationalFrequency"
+            },
+            "Efficiency": {
+                "name": "Efficiency",
+                "uri": "qudtqk",
+                "reference": "https://qudt.org/vocab/quantitykind/Efficiency"
+            },
+            "StateOfCharge": {
+                "name": "StateOfCharge",
+                "uri": "qudtqk",
+                "reference": "https://qudt.org/vocab/quantitykind/StateOfCharge"
+            },
+            "InFlow": {},
+            "OutFlow": {},
+            "NetFlow": {},
+            "Speed": {
+                "name": "Speed",
+                "uri": "qudtqk",
+                "reference": "https://qudt.org/vocab/quantitykind/Speed"
+            },
+            "Frequency": {
+                "name": "Frequency",
+                "uri": "qudtqk",
+                "reference": "https://qudt.org/vocab/quantitykind/Frequency"
+            },
+            "Current": {
+                "name": "ElectricCurrent",
+                "uri": "qudtqk",
+                "reference": "https://qudt.org/vocab/quantitykind/ElectricCurrent"
+            },
+            "Voltage": {
+                "name": "Voltage",
+                "uri": "qudtqk",
+                "reference": "https://qudt.org/vocab/quantitykind/Voltage"
+            },
+            "Concentration": {
+                "name": "Concentration",
+                "uri": "qudtqk",
+                "reference": "http://qudt.org/vocab/quantitykind/Concentration"
+            },
+            "SetPoint": {}
         },
-        "Valve": {
-            "name": "Valve",
-            "uri": "<urn:nawi-water-ontology#Valve>",
-            "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
-        },
-        "PRV": {
-            "name": "PressureReducingValve",
-            "uri": "<http://data.ashrae.org/standard223#PressureReducingValve>",
-            "reference": "https://docs.brickschema.org/modeling/connections.html"
-        },
-        "ModularUnit": {
-            "name": "",
-            "uri": "",
-            "reference": ""
-        },
-        "Pump": {
-            "name": "Pump",
-            "uri": "<urn:nawi-water-ontology#Pump>",
-            "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
-        },
-        "Tank": {
-            "name": "Tank",
-            "uri": "<urn:nawi-water-ontology#Tank>",
-            "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
-        },
-        "Reactor": {
-            "name": "Reactor",
-            "uri": "<urn:nawi-water-ontology#Reactor>",
-            "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
-        },
-        "StaticMixer": {
-            "name": "StaticMixer",
-            "uri": "<urn:nawi-water-ontology#StaticMixer>",
-            "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
-        },
-        "Reservoir": {
-            "name": "Reservoir",
-            "uri": "<urn:nawi-water-ontology#Reservoir>",
-            "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
-        },
-        "Battery": {
-            "name": "Battery",
-            "uri": "<urn:nawi-water-ontology#Battery>",
-            "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
-        },
-        "Digestion": {
-            "name": "Process-Digestion",
-            "uri": "<urn:nawi-water-ontology#Process-Digestion>",
-            "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/processtypes.ttl"
-        },
-        "Pipe": {
-            "name": "Pipe",
-            "uri": "<http://data.ashrae.org/standard223#Pipe>",
-            "reference": "https://docs.brickschema.org/modeling/connections.html"
-        },
-        "Cogeneration": {
-            "name": "Process-Cogeneration",
-            "uri": "<urn:nawi-water-ontology#Process-Cogeneration>",
-            "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/processtypes.ttl"
-        },
-        "Boiler": {
-            "name": "Boiler",
-            "uri": "<urn:nawi-water-ontology#Boiler>",
-            "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
-        },
-        "Clarification": {
-            "name": "Process-Sedimentation",
-            "uri": "<urn:nawi-water-ontology#Process-Sedimentation>",
-            "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/processtypes.ttl"
-        },
-        "Filtration": {
-            "name": "Process-Filtration",
-            "uri": "<urn:nawi-water-ontology#Process-Filtration>",
-            "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/processtypes.ttl"
-        },
-        "ROMembrane": {
-            "name": "Process-ReverseOsmosis",
-            "uri": "<urn:nawi-water-ontology#Process-ReverseOsmosis>",
-            "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/processtypes.ttl"
-        },
-        "Screening": {
-            "name": "Process-Screening",
-            "uri": "<urn:nawi-water-ontology#Process-Screening>",
-            "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/processtypes.ttl"
-        },
-        "Conditioning": {
-            "name": "Conditioner",
-            "uri": "<urn:nawi-water-ontology#Conditioner>",
-            "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
-        },
-        "Thickening": {
-            "name": "Thickener",
-            "uri": "<urn:nawi-water-ontology#Thickener>",
-            "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
-        },
-        "Aeration": {
-            "name": "Process-Aeration",
-            "uri": "<urn:nawi-water-ontology#Process-Aeration>",
-            "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/processtypes.ttl"
-        },
-        "Disinfection": {
-            "name": "Process-Disinfection",
-            "uri": "<urn:nawi-water-ontology#Process-Disinfection>",
-            "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/processtypes.ttl"
-        },
-        "Chlorination": {
-            "name": "Process-Chlorination",
-            "uri": "<urn:nawi-water-ontology#Process-Chlorination>",
-            "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/processtypes.ttl"
-        },
-        "UVSystem": {
-            "name": "Process-UVDisinfection",
-            "uri": "<urn:nawi-water-ontology#Process-UVDisinfection>",
-            "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/processtypes.ttl"
-        },
-        "Flaring": {
-            "name": "Flare",
-            "uri": "<urn:nawi-water-ontology#Flare>",
-            "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
-        },
-        "Separator": {
-            "name": "Process-Separation",
-            "uri": "<urn:nawi-water-ontology#Process-Separation>",
-            "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/processtypes.ttl"
+        "units": {
+            "pound / inch ** 2": {
+
+            },
+            "NTU": {},
+            "milligram / liter": {
+                "name": "MilliGM-PER-L"
+            },
+            "microgram / liter": {
+                "name": "MicroGM-PER-L"
+            },
+            "hertz": {
+                "name": "HZ",
+                "reference": "https://qudt.org/vocab/unit/HZ"
+            },
+            "MGD": {},
+            "gallon / minute": {},
+            "microsiemens / centimeter": {}
         }
     },
     "WaTr2PyPES": {}

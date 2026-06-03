@@ -272,22 +272,47 @@
         },
         "units": {
             "pound / inch ** 2": {
-
+                "name": "PSI",
+                "uri": "unit",
+                "reference": "https://qudt.org/vocab/unit/PSI"
             },
-            "NTU": {},
+            "NTU": {
+                "name": "NTU",
+                "uri": "unit",
+                "reference": "https://qudt.org/vocab/unit/NTU"
+            },
             "milligram / liter": {
-                "name": "MilliGM-PER-L"
+                "name": "MilliGM-PER-L",
+                "uri": "unit",
+                "reference": "https://qudt.org/vocab/unit/MilliGM-PER-L"
             },
             "microgram / liter": {
-                "name": "MicroGM-PER-L"
+                "name": "MicroGM-PER-L",
+                "uri": "unit",
+                "reference": "https://qudt.org/vocab/unit/MicroGM-PER-L"
             },
             "hertz": {
                 "name": "HZ",
+                "uri": "unit",
                 "reference": "https://qudt.org/vocab/unit/HZ"
             },
             "MGD": {},
-            "gallon / minute": {},
-            "microsiemens / centimeter": {}
+            "gallon / day": {
+                "name": "GAL_US-PER-DAY",
+                "uri": "unit",
+                "reference": "https://qudt.org/vocab/unit/GAL_US-PER-DAY"
+            },
+            "gallon / minute": {
+                "name": "GAL_US-PER-MIN",
+                "uri": "unit",
+                "reference": "https://qudt.org/vocab/unit/GAL_US-PER-MIN"
+            },
+            "microsiemens / centimeter": {
+                "name": "MicroS-PER-CentiM",
+                "uri": "unit",
+                "reference": "https://qudt.org/vocab/unit/MicroS-PER-CentiM"
+            },
+            "therm": {}
         }
     },
     "WaTr2PyPES": {}

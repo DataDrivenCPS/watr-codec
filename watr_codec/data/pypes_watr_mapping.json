@@ -107,9 +107,9 @@
                 "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
             },
             "Aeration": {
-                "name": "Process-Aeration",
+                "name": "AerationBasin",
                 "uri": "watr",
-                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/processtypes.ttl"
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
             },
             "Disinfection": {
                 "name": "Process-Disinfection",
@@ -152,7 +152,7 @@
             "Wireless": {
                 "name": "EM",
                 "uri": "s223",
-                "refrenece": "https://explore.open223.info/#s223:EM"
+                "reference": "https://explore.open223.info/#s223:EM"
             }
         },
         "tag_types": {
@@ -269,6 +269,21 @@
                 "reference": "http://qudt.org/vocab/quantitykind/Concentration"
             },
             "SetPoint": {}
+        },
+        "contents_types": {
+            "Brine": {
+                "name": "Water-Brine",
+                "uri": "watr",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/substances.ttl"
+            },
+            "ProductWater": {
+                "name": "Fluid-Water",
+                "uri": "s223",
+                "reference": "https://explore.open223.info/#s223:Fluid-Water",
+                "role": "Role-Permeate",
+                "role-uri": "watr",
+                "role-reference": ""
+            }
         },
         "units": {
             "pound / inch ** 2": {

@@ -155,7 +155,7 @@
                 "reference": "https://explore.open223.info/#s223:EM"
             }
         },
-        "tag_types": {
+        "properties": {
             "Flow": {
                 "name": "VolumeFlowRate",
                 "uri": "qudtqk",

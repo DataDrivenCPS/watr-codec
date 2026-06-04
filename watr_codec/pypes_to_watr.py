@@ -7,7 +7,7 @@ import json
 class PyPES2WaTr:
     def __init__(
         self, 
-        node: pypes.node.Node, 
+        network: pypes.node.Network, 
         local_prefix: str,
         mapping_path="data/pypes_watr_mapping.json",
         uri_mapping_path="data/uri_mapping.json"
@@ -38,15 +38,64 @@ class PyPES2WaTr:
     def convert_tag_type(self, tag_type: pypes.tag.TagType):
         # Look up PyPES2WaTr mapping for PyPES TagType to WaTr properties
         # Also return true/false for quantity vs. enum kind
-        prop_dict = self.mapping["PyPES2WaTr"]["tag_types"][tag_type.name]
+        prop_dict = self.mapping["PyPES2WaTr"]["properties"][tag_type.name]
         is_quant_kind = "EnumerationKind" not in prop_dict["name"]
         
         return prop_dict, is_quant_kind
 
+    def generate_conn_point_name(self, name: str):
+        try:
+            while self.conn_point_dict[name]:
+                old_num = int(name[:-1])
+                name = name[:-2] + "-" + str(old_num + 1)
+        except KeyError:
+            pass
+        return name
+
+    # SAMPLE CONNECTION POINTS OUTPUT
+    # wbs:Primary_Sedimentation_Junction-outlet-cp-2 a s223:OutletConnectionPoint ;
+    #     s223:cnx wbs:conn-Primary_Sedimentation_Junction-to-AS_Aeration_Basin ;
+    #     s223:connectsAt wbs:conn-Primary_Sedimentation_Junction-to-AS_Aeration_Basin ;
+    #     s223:connectsThrough wbs:conn-Primary_Sedimentation_Junction-to-AS_Aeration_Basin ;
+    #     s223:hasMedium s223:Medium-Water .
+    #
+    # wbs:AS_Aeration_Basin-in a s223:InletConnectionPoint ;
+    #     s223:connectsAt wbs:conn-Primary_Sedimentation_Junction-to-AS_Aeration_Basin ;
+    #     s223:connectsThrough wbs:conn-Primary_Sedimentation_Junction-to-AS_Aeration_Basin ;
+    #     s223:hasMedium s223:Medium-Water .
+
     def create_conn_points(self, conn: pypes.connection.Connection):
-        
-        
-        return inlet_conn_point, outlet_conn_point
+        source_name = conn.source.id + "-cp-1"
+        self.generate_conn_point_name(source_name)
+        source_str = f"{self.local_prefix}:{source_name} a s223:OutletConnectionPoint ;\n"
+        dest_name = conn.destination.id + "-cp-1"
+        self.generate_conn_point_name(dest_name)
+        dest_str = f"{self.local_prefix}:{dest_name} a s223:InletConnectionPoint ;\n"
+
+        medium_dict = self.convert_contents(conn.contents)
+        medium_name = medium_dict["name"]
+        medium_uri = medium_dict["uri"]
+        source_str += f"    s223:hasMedium {medium_uri}:{medium_name} ;\n"
+        dest_str += f"    s223:hasMedium {medium_uri}:{medium_name} ;\n"
+        role = medium_dict.get("role")
+        if role:
+            source_str += f"    s223:hasRole {medium_dict["role-uri"]}:{role} .\n"
+        else: # if no role, change the closing `;` to `.`
+            source_str = source_str[:-2] + ".\n"
+            dest_str = dest_str[:-2] + ".\n"
+
+        # NOTE: ignoring connectsAt and connectsThrough as those can be inferred 
+        self.conn_point_dict[source_cp_name] = {
+            "node": conn.source.id,
+            "connection": conn.id,
+            "ttl_str": source_str,
+        }
+        self.conn_point_dict[dest_cp_name] = {
+            "node": conn.destination.id,
+            "connection": conn.id,
+            "ttl_str": dest_str,
+        }
+        return source_cp_name, dest_cp_name
  
     def translate_tag(self, tag: pypes.Tag):
         # Tag attributes:
@@ -141,16 +190,15 @@ class PyPES2WaTr:
         conn_from_list = []
         conn_to_list = []
         for conn_id in self.node_to_conn_ids[node.id]:
-            conn_point_out = self.conn_dict[conn_id]["conn_point_out"]            
-            # TODO: ask if `connected` or `connectedThrough` are also necessary
+            # TODO: double check below logic
             if self.conn_dict[conn_id]["destination"] == node.id:
-                conn_point_list.append(self.conn_dict[conn_id]["conn_point_out"])
+                conn_point_list.append(self.conn_dict[conn_id]["dest_conn_point"])
                 conn_from_list.append(self.conn_dict[conn_id]["source"])
-                result_str += f"    s223:connectedFrom {self.local_prefix}:{self.conn_dict[conn_id]["source"]} ;\n"
+                # result_str += f"    s223:connectedFrom {self.local_prefix}:{self.conn_dict[conn_id]["source"]} ;\n"
             elif self.conn_dict[conn_id]["source"] == node.id:
-                conn_point_out = self.conn_dict[conn_id]["conn_point_in"]
+                conn_point_list.append(self.conn_dict[conn_id]["source_conn_point"])
                 conn_to_list.append(self.conn_dict[conn_id]["destination"])
-                result_str += f"    s223:connectedTo {self.local_prefix}:{self.conn_dict[conn_id]["destination"]} ;\n"
+                # result_str += f"    s223:connectedTo {self.local_prefix}:{self.conn_dict[conn_id]["destination"]} ;\n"
             else:
                 raise ValueError("Connection `source` or `destination` must match node `id`")
         
@@ -164,6 +212,11 @@ class PyPES2WaTr:
         if conn_point_str:
             conn_point_str += " ;\n"
             result_str += conn_point_str
+
+        medium_dict = self.convert_contents(node.contents)
+        medium_name = medium_dict["name"]
+        medium_uri = medium_dict["uri"]
+        source_str += f"    s223:hasMedium {medium_uri}:{medium_name} ;\n"
 
         # TODO: check that hasProperty can have unlimited entries
         for prop_id, prop_attrs in self.property_dict.items():
@@ -189,27 +242,15 @@ class PyPES2WaTr:
             "connected_to": conn_to_list,
             "ttl_str": result_str,
         }
-        return self.node_dict[node_id]        
+        return self.node_dict[node_id]
 
     # SAMPLE CONNECTION POINT AND CONNECTION OUTPUT:
-    # TODO: are both s223:Connection and s223:Pipe necessary in the first triple
     # wbs:conn-Primary_Sedimentation_Junction-to-AS_Aeration_Basin a s223:Connection,
     #     s223:Pipe ;
     #     s223:cnx wbs:AS_Aeration_Basin-in,
     #         wbs:Primary_Sedimentation_Junction-outlet-cp-2 ;
     #     s223:connectsFrom wbs:Primary_Sedimentation_Junction ;
     #     s223:connectsTo wbs:AS_Aeration_Basin .
-    #
-    # wbs:Primary_Sedimentation_Junction-outlet-cp-2 a s223:OutletConnectionPoint ;
-    #     s223:cnx wbs:conn-Primary_Sedimentation_Junction-to-AS_Aeration_Basin ;
-    #     s223:connectsAt wbs:conn-Primary_Sedimentation_Junction-to-AS_Aeration_Basin ;
-    #     s223:connectsThrough wbs:conn-Primary_Sedimentation_Junction-to-AS_Aeration_Basin ;
-    #     s223:hasMedium s223:Medium-Water .
-    #
-    # wbs:AS_Aeration_Basin-in a s223:InletConnectionPoint ;
-    #     s223:connectsAt wbs:conn-Primary_Sedimentation_Junction-to-AS_Aeration_Basin ;
-    #     s223:connectsThrough wbs:conn-Primary_Sedimentation_Junction-to-AS_Aeration_Basin ;
-    #     s223:hasMedium s223:Medium-Water .
 
     def translate_connection(self, conn: pypes.Connection):
         pypes_class = type(connection).__name__
@@ -226,20 +267,24 @@ class PyPES2WaTr:
         except KeyError:
             self.node_to_conn_ids[conn.destination.id] = [connection.id]
 
-        conn_str = f"{self.local_prefix}:{conn_id} a s223:Connection, {conn_data["uri"]}:{conn_data["name"]} ;\n"
-        inlet_conn_point, outlet_conn_point = self.create_conn_points(conn)
-        # conn_str += f"    s223:cnx {self.local_prefix}:{}"
-        # connectsFrom
-        # connectsTo
+        conn_str = f"{self.local_prefix}:{conn_id} a {conn_data["uri"]}:{conn_data["name"]} ;\n"
+        source_conn_point, dest_conn_point = self.create_conn_points(conn)
+        conn_str += f"    s223:cnx {self.local_prefix}:{outlet_conn_point} {self.local_prefix}:{inlet_conn_point} ;\n"
 
-        # TODO: add logic to handle source and destination unit IDS
+        # TODO: add logic to handle source and destination unit IDs
         # TODO: add logic for bidirectional connections
         # TODO: how to track all the attributes of PyPES connections (e.g., diameter)?
+        for prop_name, prop_value in vars(conn).items():
+            prop_data = self.mapping["PyPES2WaTr"]["properties"][prop_name]
+
         self.conn_dict[conn_id] = {
             "connection": conn_data["name"],
+            "source_conn_point": source_conn_point,
+            "dest_conn_point": dest_conn_point,
             "ttl_str": conn_str
         }
 
+    # TODO: add contains and isContained logic to network hierarchy
     def translate_network(self, network: pypes.Network):
         for tag in network.get_all_tags():
             if isinstance(tag, pypes.VirtualTag):
@@ -253,7 +298,28 @@ class PyPES2WaTr:
                 self.translate_network(node)
             else:
                 self.translate_node(node)
+        if self.world.id != network.id:
+            self.translate_node(network)
     
-    def export_ttl(self):
-        result = translate_network(self.world)
-        # export resulting string or other data structure to `.ttl` file
+    def generate_header(self):
+        header = ""
+        for key, val in self.uri_mapping.items():
+            header += f"@prefix {key}:{val} .\n"
+        header += f"@prefix {self.local_prefix}:<urn:ex/> .\n\n"
+        header += f"{self.local_prefix}: a owl:Ontology .\n"
+        return header
+
+    def export_ttl(self, outpath):
+        translate_network(self.world)
+        result = self.generate_header()
+        for prop_data in self.property_dict.values():
+            result += "\n" + prop_data["ttl_str"]
+        for conn_data in self.conn_dict.values():
+            result += "\n" + conn_data["ttl_str"]
+        for conn_point_data in self.conn_point_dict.values():
+            result += "\n" + conn_point_data["ttl_str"]
+        for node_data in self.conn_point_dict.values():
+            result += "\n" + node_data["ttl_str"]
+
+        with open(outpath, "w", encoding="utf-8") as file:
+            file.write(result)

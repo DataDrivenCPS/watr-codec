@@ -180,7 +180,7 @@
     "tags": {
       "AIT_400_001A_P.PV": {
         "type": "Conductivity",
-        "units": "uS/cm",
+        "units": "uSiemens/cm",
         "contents": "Brine"
       }, 
       "FIT_400_002A_P.PV": {

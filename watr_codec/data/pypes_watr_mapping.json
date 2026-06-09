@@ -155,7 +155,7 @@
                 "reference": "https://explore.open223.info/#s223:EM"
             }
         },
-        "properties": {
+        "tag_types": {
             "Flow": {
                 "name": "VolumeFlowRate",
                 "uri": "qudtqk",
@@ -270,6 +270,34 @@
             },
             "SetPoint": {}
         },
+        "attributes": {
+            "diameter": {
+                "name": "Diameter",
+                "uri": "qudtqk",
+                "reference": "https://qudt.org/vocab/quantitykind/Diameter"
+            },
+            "elevation": {
+                "name": "Altitude",
+                "uri": "qudtqk",
+                "reference": "https://qudt.org/vocab/quantitykind/Altitude"
+            },
+            "friction_coeff": {
+                "name": "FrictionCoefficient",
+                "uri": "qudtqk",
+                "reference": "https://qudt.org/vocab/quantitykind/FrictionCoefficient"
+            },
+            "permeability": {
+                "name": "HydraulicPermeability",
+                "uri": "qudtqk",
+                "reference": "https://qudt.org/vocab/quantitykind/HydraulicPermeability"
+            },
+            "selectivity": {},
+            "volume": {
+                "name": "Volume",
+                "uri": "qudtqk",
+                "reference": "https://qudt.org/vocab/quantitykind/Volume"
+            }
+        },
         "contents_types": {
             "Brine": {
                 "name": "Water-Brine",
@@ -286,7 +314,7 @@
             }
         },
         "units": {
-            "pound / inch ** 2": {
+            "pound_force_per_square_inch": {
                 "name": "PSI",
                 "uri": "unit",
                 "reference": "https://qudt.org/vocab/unit/PSI"

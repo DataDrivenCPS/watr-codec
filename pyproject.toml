@@ -1,0 +1,7 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+
+[project]
+name = "watr_codec"
+version = "0.1.0"
+dependencies = ["pype_schema>=0.7.0"]

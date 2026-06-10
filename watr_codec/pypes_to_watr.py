@@ -193,6 +193,7 @@ class PyPES2WaTr:
             prop_str = f"    S223:hasEnumerationKind {prop_data['uri']}:{prop_data['name']} ;\n"
 
         result_str = f"{self.local_prefix}:{prop_id} a s223:{prop_type} ;\n"
+        result_str = f"    s223:hasValue {value} ;\n"
         
         # contents may be impossible to automatically discern for nodes, hence this check
         if contents is not None:

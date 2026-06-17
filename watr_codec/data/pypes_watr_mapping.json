@@ -187,9 +187,9 @@
                 "reference": "http://qudt.org/vocab/quantitykind/Time"
             },
             "RunStatus": {
-                "name": "EnumerationKind-Status",
-                "uri": "watr",
-                "reference": ""
+                "name": "Binary-OnOff",
+                "uri": "s223",
+                "reference": "https://explore.open223.info/#s223:Binary-OnOff"
             },
             "TSS": {
                 "name": "Concentration",

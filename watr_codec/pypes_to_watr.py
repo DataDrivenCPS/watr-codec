@@ -269,7 +269,7 @@ class PyPES2WaTr:
             prop_type = "QuantifiableObservableProperty"
             prop_str = f"    qudt:hasQuantityKind {prop_data[URI_KEY]}:{prop_data[NAME_KEY]} ;\n"
         else:
-            prop_type = "EnumerableObservableProperty"
+            prop_type = "EnumeratedObservableProperty"
             prop_str = f"    S223:hasEnumerationKind {prop_data[URI_KEY]}:{prop_data[NAME_KEY]} ;\n"
         
         result_str = f"{self.local_prefix}:{tag_id} a s223:{prop_type} ;\n"
@@ -449,6 +449,7 @@ class PyPES2WaTr:
         # TODO: add logic for bidirectional connections
         for prop_name, prop_val in conn.__dict__.items(): # get all attributes
             if prop_name in CUSTOM_HANDLED_ATTRIBUTES or prop_name[0] == "_":
+                # TODO: add logic for dictionary attributes (like flow_rate and gen_capacity)
                 # ignore internal attributes starting with `_`
                 # and those handled elsewhere (`CUSTOM_HANDLED_ATTRIBUTES`)
                 pass

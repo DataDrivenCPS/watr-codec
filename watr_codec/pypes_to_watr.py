@@ -101,6 +101,7 @@ class PyPES2WaTr:
 
     def generate_conn_point_name(self, name: str):
         try:
+            # TODO: this breaks for double digit numbers
             while self.conn_point_dict[name]:
                 old_num = int(name[-1])
                 name = name[:-2] + "-" + str(old_num + 1)
@@ -108,24 +109,12 @@ class PyPES2WaTr:
             pass
         return name
 
-    # SAMPLE CONNECTION POINTS OUTPUT
-    # wbs:Primary_Sedimentation_Junction-outlet-cp-2 a s223:OutletConnectionPoint ;
-    #     s223:cnx wbs:conn-Primary_Sedimentation_Junction-to-AS_Aeration_Basin ;
-    #     s223:connectsAt wbs:conn-Primary_Sedimentation_Junction-to-AS_Aeration_Basin ;
-    #     s223:connectsThrough wbs:conn-Primary_Sedimentation_Junction-to-AS_Aeration_Basin ;
-    #     s223:hasMedium s223:Medium-Water .
-    #
-    # wbs:AS_Aeration_Basin-in a s223:InletConnectionPoint ;
-    #     s223:connectsAt wbs:conn-Primary_Sedimentation_Junction-to-AS_Aeration_Basin ;
-    #     s223:connectsThrough wbs:conn-Primary_Sedimentation_Junction-to-AS_Aeration_Basin ;
-    #     s223:hasMedium s223:Medium-Water .
-
     def create_conn_points(self, conn: connection.Connection):
         source_name = conn.source.id + "-cp-1"
-        self.generate_conn_point_name(source_name)
+        source_name = self.generate_conn_point_name(source_name)
         source_str = f"{self.local_prefix}:{source_name} a s223:OutletConnectionPoint ;\n"
         dest_name = conn.destination.id + "-cp-1"
-        self.generate_conn_point_name(dest_name)
+        dest_name = self.generate_conn_point_name(dest_name)
         dest_str = f"{self.local_prefix}:{dest_name} a s223:InletConnectionPoint ;\n"
 
         medium_dict = self.convert_contents(conn.contents)
@@ -136,6 +125,7 @@ class PyPES2WaTr:
         role = medium_dict.get("role")
         if role:
             source_str += f"    s223:hasRole {medium_dict["role-uri"]}:{role} .\n"
+            dest_str += f"    s223:hasRole {medium_dict["role-uri"]}:{role} .\n"
         else: # if no role, change the closing `;` to `.`
             source_str = source_str[:-2] + ".\n"
             dest_str = dest_str[:-2] + ".\n"
@@ -179,9 +169,12 @@ class PyPES2WaTr:
         prop_id = parent_id + attr_name
         # TODO: handle dictionary attributes
         try: # if Pint object, there will be units and magnitude fields
-            converted_units = self.convert_units(value.units)
+            unit_dict = self.convert_units(value.units)
+            converted_units = unit_dict[NAME_KEY]
+            unit_uri = unit_dict[URI_KEY]
             value = value.magnitude
         except AttributeError: # if no `units` attribute, assume value is directly stored
+            unit_dict = {}
             converted_units = None
         prop_data, is_quant_kind = self.convert_attribute(attr_name)
 
@@ -193,7 +186,8 @@ class PyPES2WaTr:
             prop_str = f"    S223:hasEnumerationKind {prop_data['uri']}:{prop_data['name']} ;\n"
 
         result_str = f"{self.local_prefix}:{prop_id} a s223:{prop_type} ;\n"
-        result_str = f"    s223:hasValue {value} ;\n"
+        if value: # skip if value is None
+            result_str = f"    s223:hasValue {value} ;\n"
         
         # contents may be impossible to automatically discern for nodes, hence this check
         if contents is not None:
@@ -220,7 +214,7 @@ class PyPES2WaTr:
             substance_uri = None
         
         if converted_units:
-            result_str += f"    s223:hasUnit s223:{converted_units} .\n"
+            result_str += f"    s223:hasUnit {units_uri}:{converted_units} .\n"
         else: # if no units, change the closing `;` to `.`
             result_str = result_str[:-2] + ".\n"
 
@@ -238,7 +232,7 @@ class PyPES2WaTr:
             "source_unit_id": None, # TODO: use this downstream
             "dest_unit_id": None, # TODO: use this downstream
             "is_quant_kind": is_quant_kind,
-            UNITS_KEY: converted_units,
+            UNITS_KEY: unit_dict,
             "ttl_str": result_str,
         }
         return self.property_dict[prop_id]
@@ -263,7 +257,13 @@ class PyPES2WaTr:
         # and calibration are all ignored
         tag_id = tag.id.replace(" ", "-")
         parent_id = tag.parent_id.replace(" ", "-")
-        converted_units = self.convert_units(tag.units)
+        try: # if Pint object, there will be units and magnitude fields
+            unit_dict = self.convert_units(tag.units)
+            converted_units = unit_dict[NAME_KEY]
+            unit_uri = unit_dict[URI_KEY]
+        except AttributeError: # if no `units` attribute, assume value is directly stored
+            unit_dict = {}
+            converted_units = None        
         prop_data, is_quant_kind = self.convert_tag_type(tag.tag_type)
         if is_quant_kind:
             prop_type = "QuantifiableObservableProperty"
@@ -295,7 +295,12 @@ class PyPES2WaTr:
             result_str += f"    s223:ofSubstance s223:{substance} ;\n"
         else:
             substance_uri = None
-        result_str += f"    s223:hasUnit s223:{converted_units} .\n"
+        
+        if converted_units:
+            result_str += f"    s223:hasUnit {unit_uri}:{converted_units} .\n"
+        else: # if no units, change the closing `;` to `.`
+            result_str = result_str[:-2] + ".\n"
+
         self.property_dict[tag_id] = {
             "property": prop_data[NAME_KEY],
             "prop_type": prop_type,
@@ -310,24 +315,11 @@ class PyPES2WaTr:
             "source_unit_id": tag.source_unit_id, # TODO: use this downstream
             "dest_unit_id": tag.dest_unit_id, # TODO: use this downstream
             "is_quant_kind": is_quant_kind,
-            UNITS_KEY: converted_units,
+            UNITS_KEY: unit_dict,
             "ttl_str": result_str,
         }
         return self.property_dict[tag_id]
         
-    # SAMPLE NODE OUTPUT:
-    # wbs:AS_Aeration_Basin a nawi:AerationBasin ;
-    #     s223:cnx wbs:AS_Aeration_Basin-in,
-    #         wbs:AS_Aeration_Basin-out ;
-    #     s223:connected wbs:AS_Secondary_Sedimentation ;
-    #     s223:connectedThrough wbs:conn-AS_Aeration_Basin-to-AS_Secondary_Sedimentation,
-    #         wbs:conn-Primary_Sedimentation_Junction-to-AS_Aeration_Basin ;
-    #     s223:connectedTo wbs:AS_Secondary_Sedimentation ;
-    #     s223:hasConnectionPoint wbs:AS_Aeration_Basin-in,
-    #         wbs:AS_Aeration_Basin-out ;
-    #     s223:hasProperty wbs:AS_Aeration_Basin-mlss-concentration,
-    #         wbs:AS_Aeration_Basin-volume .
-
     def translate_node(self, node: Node):
         pypes_class = type(node).__name__
         node_data = self.mapping[TOP_LEVEL_KEY]["nodes"][pypes_class]
@@ -393,7 +385,6 @@ class PyPES2WaTr:
                 # TODO: try to automatically determine contents
                 self.translate_attribute(prop_name, prop_val, node_id, contents=None)
 
-        # TODO: check that hasProperty can have unlimited entries      
         prop_str = None
         for prop_id, prop_attrs in self.property_dict.items():
             # NOTE: we have to use unmodified `node.id` NOT `node_id` to be consistent with `property_dict`
@@ -401,12 +392,12 @@ class PyPES2WaTr:
                 if prop_str is None:
                     prop_str = f"    s223:hasProperty {self.local_prefix}:{prop_id}"
                 else:
-                    prop_str += f" {self.local_prefix}:{prop_id}"
-            if prop_str: # if not None, add the closing period
-                prop_str += " .\n"
-                node_str += prop_str
-            else: # if no properties, change the closing `;` to `.`
-                node_str = node_str[:-2] + ".\n"
+                    prop_str += f", {self.local_prefix}:{prop_id}"
+        if prop_str: # if not None, add the closing period
+            prop_str += " .\n"
+            node_str += prop_str
+        else: # if no properties, change the closing `;` to `.`
+            node_str = node_str[:-2] + ".\n"
 
         # TODO: add more attributes to below dictionary
         self.node_dict[node_id] = {
@@ -417,14 +408,6 @@ class PyPES2WaTr:
             "ttl_str": node_str,
         }
         return self.node_dict[node_id]
-
-    # SAMPLE CONNECTION POINT AND CONNECTION OUTPUT:
-    # wbs:conn-Primary_Sedimentation_Junction-to-AS_Aeration_Basin a s223:Connection,
-    #     s223:Pipe ;
-    #     s223:cnx wbs:AS_Aeration_Basin-in,
-    #         wbs:Primary_Sedimentation_Junction-outlet-cp-2 ;
-    #     s223:connectsFrom wbs:Primary_Sedimentation_Junction ;
-    #     s223:connectsTo wbs:AS_Aeration_Basin .
 
     def translate_connection(self, conn: connection.Connection):
         pypes_class = type(conn).__name__
@@ -443,7 +426,7 @@ class PyPES2WaTr:
 
         conn_str = f"{self.local_prefix}:{conn_id} a {conn_data[URI_KEY]}:{conn_data[NAME_KEY]} ;\n"
         source_conn_point, dest_conn_point = self.create_conn_points(conn)
-        conn_str += f"    s223:cnx {self.local_prefix}:{source_conn_point} {self.local_prefix}:{dest_conn_point} ;\n"
+        conn_str += f"    s223:cnx {self.local_prefix}:{source_conn_point}, {self.local_prefix}:{dest_conn_point} ;\n"
 
         # TODO: add logic to handle source and destination unit IDs
         # TODO: add logic for bidirectional connections
@@ -470,12 +453,12 @@ class PyPES2WaTr:
                 if prop_str is None:
                     prop_str = f"    s223:hasProperty {self.local_prefix}:{prop_id}"
                 else:
-                    prop_str += f" {self.local_prefix}:{prop_id}"
-            if prop_str: # if not None, add the closing period
-                prop_str += " .\n"
-                conn_str += prop_str
-            else: # if no properties, change the closing `;` to `.`
-                conn_str = conn_str[:-2] + ".\n"
+                    prop_str += f", {self.local_prefix}:{prop_id}"
+        if prop_str: # if not None, add the closing period
+            prop_str += " .\n"
+            conn_str += prop_str
+        else: # if no properties, change the closing `;` to `.`
+            conn_str = conn_str[:-2] + ".\n"
 
         self.conn_dict[conn_id] = {
             "connection": conn_data[NAME_KEY],
@@ -494,7 +477,6 @@ class PyPES2WaTr:
             else:
                 self.translate_tag(tag)
         for conn in network.get_all_connections():
-            print(conn)
             self.translate_connection(conn)
         for node in network.get_all_nodes():
             if isinstance(node, Network):

@@ -9,4 +9,4 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 # load PyPES network from JSON file
 pypes_desal_system = JSONParser(current_dir + "/../watr_codec/data/desalination.json").initialize_network()
 pypes2watr = PyPES2WaTr(pypes_desal_system, local_prefix="dsl")
-pypes2watr.export_ttl(current_dir + "desal_test.ttl")
+pypes2watr.export_ttl(os.path.join(current_dir, "desal_test.ttl"))

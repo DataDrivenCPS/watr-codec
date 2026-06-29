@@ -117,6 +117,11 @@ class PyPES2WaTr:
         dest_name = self.generate_conn_point_name(dest_name)
         dest_str = f"{self.local_prefix}:{dest_name} a s223:InletConnectionPoint ;\n"
 
+        source_str += f"    s223:isConnectionPointOf {self.local_prefix}:{conn.source.id} ;\n"
+        dest_str += f"    s223:isConnectionPointOf {self.local_prefix}:{conn.destination.id} ;\n"
+        source_str += f"    s223:connectsThrough {self.local_prefix}:{conn.id} ;\n"
+        dest_str += f"    s223:connectsThrough {self.local_prefix}:{conn.id} ;\n"
+
         medium_dict = self.convert_contents(conn.contents)
         medium_name = medium_dict[NAME_KEY]
         medium_uri = medium_dict[URI_KEY]
@@ -428,6 +433,19 @@ class PyPES2WaTr:
         source_conn_point, dest_conn_point = self.create_conn_points(conn)
         conn_str += f"    s223:cnx {self.local_prefix}:{source_conn_point}, {self.local_prefix}:{dest_conn_point} ;\n"
 
+        # TODO: should Role be applied elsewhere or does it make sense in the connection?
+        medium_dict = self.convert_contents(conn.contents)
+        medium_name = medium_dict[NAME_KEY]
+        medium_uri = medium_dict[URI_KEY]
+        conn_str += f"    s223:hasMedium {medium_uri}:{medium_name} ;\n"
+        role = medium_dict.get("role")
+        if role is not None:
+            role_name = role
+            role_uri = medium_dict["role-uri"]
+            conn_str += f"    s223:hasRole {medium_dict["role-uri"]}:{role} ;\n"
+        else:
+            role_name, role_uri = None, None
+
         # TODO: add logic to handle source and destination unit IDs
         # TODO: add logic for bidirectional connections
         for prop_name, prop_val in conn.__dict__.items(): # get all attributes
@@ -466,6 +484,10 @@ class PyPES2WaTr:
             "destination": conn.destination.id,
             "source_conn_point": source_conn_point,
             "dest_conn_point": dest_conn_point,
+            "medium": medium_name,
+            "medium_uri": medium_uri,
+            "role": role_name,
+            "role_uri": role_uri,
             "ttl_str": conn_str
         }
 

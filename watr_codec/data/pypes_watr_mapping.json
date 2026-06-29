@@ -104,6 +104,7 @@
             "Conditioning": {
                 "name": "Conditioner",
                 "uri": "watr",
+                "process": "Process-Conditioning",
                 "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
             },
             "Thickening": {
@@ -115,6 +116,7 @@
             "Aeration": {
                 "name": "AerationBasin",
                 "uri": "watr",
+                "process": "Process-Aeration",
                 "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
             },
             "Disinfection": {
@@ -202,17 +204,17 @@
                 "reference": "https://explore.open223.info/#s223:Binary-OnOff"
             },
             "TSS": {
-                "name": "Concentration",
+                "name": "MassConcentration",
                 "uri": "qudtqk",
-                "reference": "http://qudt.org/vocab/quantitykind/Concentration",
+                "reference": "https://qudt.org/vocab/quantitykind/MassConcentration",
                 "substance": "Constituent-SuspendedSolids",
                 "substance-uri": "watr",
                 "substance-reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/substances.ttl"
             },
             "VSS": {
-                "name": "Concentration",
+                "name": "MassConcentration",
                 "uri": "qudtqk",
-                "reference": "http://qudt.org/vocab/quantitykind/Concentration",
+                "reference": "https://qudt.org/vocab/quantitykind/MassConcentration",
                 "substance": "Solids-VolatileSuspendedSolids",
                 "substance-uri": "watr",
                 "substance-reference": ""

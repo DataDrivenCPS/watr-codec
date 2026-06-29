@@ -1,0 +1,372 @@
+{
+    "PyPES2WaTr": {
+        "nodes": {
+            "Network": {
+                "name": "Region",
+                "uri": "rec",
+                "reference": "https://dev.realestatecore.io/ontology/Space/Region"
+            },
+            "Facility": {
+                "name": "Building",
+                "uri": "rec",
+                "reference": "https://dev.realestatecore.io/ontology/Space/Architecture/Building/Building"
+            },
+            "Junction": {
+                "name": "Junction",
+                "uri": "s223",
+                "reference": "https://docs.brickschema.org/modeling/connections.html"
+            },
+            "Valve": {
+                "name": "Valve",
+                "uri": "watr",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
+            },
+            "PRV": {
+                "name": "PressureReducingValve",
+                "uri": "s223",
+                "reference": "https://docs.brickschema.org/modeling/connections.html"
+            },
+            "ModularUnit": {
+                "name": "Zone",
+                "uri": "rec",
+                "reference": "https://dev.realestatecore.io/ontology/Space/Architecture/Zone/Zone"
+            },
+            "Pump": {
+                "name": "Pump",
+                "uri": "watr",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
+            },
+            "Tank": {
+                "name": "Tank",
+                "uri": "watr",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
+            },
+            "Reactor": {
+                "name": "Reactor",
+                "uri": "watr",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
+            },
+            "StaticMixer": {
+                "name": "StaticMixer",
+                "uri": "watr",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
+            },
+            "Reservoir": {
+                "name": "Reservoir",
+                "uri": "watr",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
+            },
+            "Battery": {
+                "name": "Battery",
+                "uri": "watr",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
+            },
+            "Digestion": {
+                "name": "Digester",
+                "uri": "watr",
+                "process": "Process-Digestion",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
+            },
+            "Cogeneration": {
+                "name": "Cogenerator",
+                "uri": "watr",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
+            },
+            "Boiler": {
+                "name": "Boiler",
+                "uri": "watr",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
+            },
+            "Clarification": {
+                "name": "SedimentationTank",
+                "uri": "watr",
+                "process": "Process-Sedimentation",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
+            },
+            "Filtration": {
+                "name": "Filter",
+                "uri": "watr",
+                "process": "Process-Filtration",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
+            },
+            "ROMembrane": {
+                "name": "ReverseOsmosisMembrane",
+                "uri": "watr",
+                "process": "Process-ReverseOsmosis",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
+            },
+            "Screening": {
+                "name": "Screen",
+                "uri": "watr",
+                "process": "Process-Screening",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
+            },
+            "Conditioning": {
+                "name": "Conditioner",
+                "uri": "watr",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
+            },
+            "Thickening": {
+                "name": "Thickener",
+                "uri": "watr",
+                "process": "Process-Thickening",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
+            },
+            "Aeration": {
+                "name": "AerationBasin",
+                "uri": "watr",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
+            },
+            "Disinfection": {
+                "name": "DisinfectionUnit",
+                "uri": "watr",
+                "process": "Process-Disinfection",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
+            },
+            "Chlorination": {
+                "name": "ChlorinationUnit",
+                "uri": "watr",
+                "process": "Process-Chlorination",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
+            },
+            "UVSystem": {
+                "name": "UltravioletLightUnit",
+                "uri": "watr",
+                "process": "Process-UVDisinfection",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
+            },
+            "Flaring": {
+                "name": "Flare",
+                "uri": "watr",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
+            },
+            "Separator": {
+                "name": "SeparationTank",
+                "uri": "watr",
+                "process": "Process-Separation",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
+            }
+        },
+        "connections": {
+            "Pipe": {
+                "name": "Pipe",
+                "uri": "s223",
+                "reference": "https://docs.brickschema.org/modeling/connections.html"
+            },
+            "Delivery": {},
+            "Wire": {
+                "name": "Wire",
+                "uri": "s223",
+                "reference": "https://docs.brickschema.org/modeling/connections.html"
+            },
+            "Wireless": {
+                "name": "EM",
+                "uri": "s223",
+                "reference": "https://explore.open223.info/#s223:EM"
+            }
+        },
+        "tag_types": {
+            "Flow": {
+                "name": "VolumeFlowRate",
+                "uri": "qudtqk",
+                "reference": "http://qudt.org/vocab/quantitykind/VolumeFlowRate"
+            },
+            "Volume": {
+                "name": "Volume",
+                "uri": "qudtqk",
+                "reference": "http://qudt.org/vocab/quantitykind/Volume"
+            },
+            "Level": {
+                "name": "LiquidLevel",
+                "uri": "qudtqk",
+                "reference": "http://qudt.org/vocab/quantitykind/LiquidLevel"
+            },
+            "Pressure": {
+                "name": "Pressure",
+                "uri": "qudtqk",
+                "reference": "http://qudt.org/vocab/quantitykind/Pressure"
+            },
+            "Temperature": {
+                "name": "Pressure",
+                "uri": "qudtqk",
+                "reference": "http://qudt.org/vocab/quantitykind/Temperature"
+            },
+            "RunTime": {
+                "name": "Time",
+                "uri": "qudtqk",
+                "reference": "http://qudt.org/vocab/quantitykind/Time"
+            },
+            "RunStatus": {
+                "name": "Binary-OnOff",
+                "uri": "s223",
+                "reference": "https://explore.open223.info/#s223:Binary-OnOff"
+            },
+            "TSS": {
+                "name": "Concentration",
+                "uri": "qudtqk",
+                "reference": "http://qudt.org/vocab/quantitykind/Concentration",
+                "substance": "Constituent-SuspendedSolids",
+                "substance-uri": "watr",
+                "substance-reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/substances.ttl"
+            },
+            "VSS": {
+                "name": "Concentration",
+                "uri": "qudtqk",
+                "reference": "http://qudt.org/vocab/quantitykind/Concentration",
+                "substance": "Solids-VolatileSuspendedSolids",
+                "substance-uri": "watr",
+                "substance-reference": ""
+            },
+            "TDS": {},
+            "COD": {},
+            "BOD": {},
+            "pH": {
+                "name": "Acidity",
+                "uri": "qudtqk",
+                "reference": "https://qudt.org/vocab/quantitykind/Acidity"
+            },
+            "Conductivity": {
+                "name": "ElectricConductivity",
+                "uri": "qudtqk",
+                "reference": "https://qudt.org/vocab/quantitykind/ElectricConductivity"
+            },
+            "Turbidity": {
+                "name": "Turbidity",
+                "uri": "qudtqk",
+                "reference": "https://qudt.org/vocab/quantitykind/Turbidity"
+            },
+            "Rotation":  {
+                "name": "RotationalFrequency",
+                "uri": "qudtqk",
+                "reference": "https://qudt.org/vocab/quantitykind/RotationalFrequency"
+            },
+            "Efficiency": {
+                "name": "Efficiency",
+                "uri": "qudtqk",
+                "reference": "https://qudt.org/vocab/quantitykind/Efficiency"
+            },
+            "StateOfCharge": {
+                "name": "StateOfCharge",
+                "uri": "qudtqk",
+                "reference": "https://qudt.org/vocab/quantitykind/StateOfCharge"
+            },
+            "InFlow": {},
+            "OutFlow": {},
+            "NetFlow": {},
+            "Speed": {
+                "name": "Speed",
+                "uri": "qudtqk",
+                "reference": "https://qudt.org/vocab/quantitykind/Speed"
+            },
+            "Frequency": {
+                "name": "Frequency",
+                "uri": "qudtqk",
+                "reference": "https://qudt.org/vocab/quantitykind/Frequency"
+            },
+            "Current": {
+                "name": "ElectricCurrent",
+                "uri": "qudtqk",
+                "reference": "https://qudt.org/vocab/quantitykind/ElectricCurrent"
+            },
+            "Voltage": {
+                "name": "Voltage",
+                "uri": "qudtqk",
+                "reference": "https://qudt.org/vocab/quantitykind/Voltage"
+            },
+            "Concentration": {
+                "name": "Concentration",
+                "uri": "qudtqk",
+                "reference": "http://qudt.org/vocab/quantitykind/Concentration"
+            },
+            "SetPoint": {}
+        },
+        "attributes": {
+            "diameter": {
+                "name": "Diameter",
+                "uri": "qudtqk",
+                "reference": "https://qudt.org/vocab/quantitykind/Diameter"
+            },
+            "elevation": {
+                "name": "Altitude",
+                "uri": "qudtqk",
+                "reference": "https://qudt.org/vocab/quantitykind/Altitude"
+            },
+            "friction_coeff": {
+                "name": "FrictionCoefficient",
+                "uri": "qudtqk",
+                "reference": "https://qudt.org/vocab/quantitykind/FrictionCoefficient"
+            },
+            "permeability": {
+                "name": "HydraulicPermeability",
+                "uri": "qudtqk",
+                "reference": "https://qudt.org/vocab/quantitykind/HydraulicPermeability"
+            },
+            "selectivity": {},
+            "volume": {
+                "name": "Volume",
+                "uri": "qudtqk",
+                "reference": "https://qudt.org/vocab/quantitykind/Volume"
+            }
+        },
+        "contents_types": {
+            "Brine": {
+                "name": "Water-Brine",
+                "uri": "watr",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/substances.ttl"
+            },
+            "ProductWater": {
+                "name": "Fluid-Water",
+                "uri": "s223",
+                "reference": "https://explore.open223.info/#s223:Fluid-Water",
+                "role": "Role-Permeate",
+                "role-uri": "watr",
+                "role-reference": ""
+            }
+        },
+        "units": {
+            "pound_force_per_square_inch": {
+                "name": "PSI",
+                "uri": "unit",
+                "reference": "https://qudt.org/vocab/unit/PSI"
+            },
+            "NTU": {
+                "name": "NTU",
+                "uri": "unit",
+                "reference": "https://qudt.org/vocab/unit/NTU"
+            },
+            "milligram / liter": {
+                "name": "MilliGM-PER-L",
+                "uri": "unit",
+                "reference": "https://qudt.org/vocab/unit/MilliGM-PER-L"
+            },
+            "microgram / liter": {
+                "name": "MicroGM-PER-L",
+                "uri": "unit",
+                "reference": "https://qudt.org/vocab/unit/MicroGM-PER-L"
+            },
+            "hertz": {
+                "name": "HZ",
+                "uri": "unit",
+                "reference": "https://qudt.org/vocab/unit/HZ"
+            },
+            "MGD": {},
+            "gallon / day": {
+                "name": "GAL_US-PER-DAY",
+                "uri": "unit",
+                "reference": "https://qudt.org/vocab/unit/GAL_US-PER-DAY"
+            },
+            "gallon / minute": {
+                "name": "GAL_US-PER-MIN",
+                "uri": "unit",
+                "reference": "https://qudt.org/vocab/unit/GAL_US-PER-MIN"
+            },
+            "microsiemens / centimeter": {
+                "name": "MicroS-PER-CentiM",
+                "uri": "unit",
+                "reference": "https://qudt.org/vocab/unit/MicroS-PER-CentiM"
+            },
+            "therm": {}
+        }
+    },
+    "WaTr2PyPES": {}
+}

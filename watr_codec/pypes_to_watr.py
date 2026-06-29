@@ -11,11 +11,14 @@ WATR_CODEC_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # strings are stored as global variables to avoid hardcoding
 TOP_LEVEL_KEY = "PyPES2WaTr"
+PROCESS_KEY = "process"
 UNITS_KEY = "units"
 NAME_KEY = "name"
 URI_KEY = "uri"
 ENUM_KIND_STR = "EnumerationKind"
 QUANT_KIND_STR = "QuantityKind"
+S223_URI = "s223"
+WATR_URI = "watr"
 
 # These attributes are handled by custom logic and not automatically
 CUSTOM_HANDLED_ATTRIBUTES = [
@@ -112,25 +115,25 @@ class PyPES2WaTr:
     def create_conn_points(self, conn: connection.Connection):
         source_name = conn.source.id + "-cp-1"
         source_name = self.generate_conn_point_name(source_name)
-        source_str = f"{self.local_prefix}:{source_name} a s223:OutletConnectionPoint ;\n"
+        source_str = f"{self.local_prefix}:{source_name} a {S223_URI}:OutletConnectionPoint ;\n"
         dest_name = conn.destination.id + "-cp-1"
         dest_name = self.generate_conn_point_name(dest_name)
-        dest_str = f"{self.local_prefix}:{dest_name} a s223:InletConnectionPoint ;\n"
+        dest_str = f"{self.local_prefix}:{dest_name} a {S223_URI}:InletConnectionPoint ;\n"
 
-        source_str += f"    s223:isConnectionPointOf {self.local_prefix}:{conn.source.id} ;\n"
-        dest_str += f"    s223:isConnectionPointOf {self.local_prefix}:{conn.destination.id} ;\n"
-        source_str += f"    s223:connectsThrough {self.local_prefix}:{conn.id} ;\n"
-        dest_str += f"    s223:connectsThrough {self.local_prefix}:{conn.id} ;\n"
+        source_str += f"    {S223_URI}:isConnectionPointOf {self.local_prefix}:{conn.source.id} ;\n"
+        dest_str += f"    {S223_URI}:isConnectionPointOf {self.local_prefix}:{conn.destination.id} ;\n"
+        source_str += f"    {S223_URI}:connectsThrough {self.local_prefix}:{conn.id} ;\n"
+        dest_str += f"    {S223_URI}:connectsThrough {self.local_prefix}:{conn.id} ;\n"
 
         medium_dict = self.convert_contents(conn.contents)
         medium_name = medium_dict[NAME_KEY]
         medium_uri = medium_dict[URI_KEY]
-        source_str += f"    s223:hasMedium {medium_uri}:{medium_name} ;\n"
-        dest_str += f"    s223:hasMedium {medium_uri}:{medium_name} ;\n"
+        source_str += f"    {S223_URI}:hasMedium {medium_uri}:{medium_name} ;\n"
+        dest_str += f"    {S223_URI}:hasMedium {medium_uri}:{medium_name} ;\n"
         role = medium_dict.get("role")
         if role:
-            source_str += f"    s223:hasRole {medium_dict["role-uri"]}:{role} .\n"
-            dest_str += f"    s223:hasRole {medium_dict["role-uri"]}:{role} .\n"
+            source_str += f"    {S223_URI}:hasRole {medium_dict["role-uri"]}:{role} .\n"
+            dest_str += f"    {S223_URI}:hasRole {medium_dict["role-uri"]}:{role} .\n"
         else: # if no role, change the closing `;` to `.`
             source_str = source_str[:-2] + ".\n"
             dest_str = dest_str[:-2] + ".\n"
@@ -188,11 +191,11 @@ class PyPES2WaTr:
             prop_str = f"    qudt:hasQuantityKind {prop_data['uri']}:{prop_data['name']} ;\n"
         else:
             prop_type = "EnumerableProperty"
-            prop_str = f"    S223:hasEnumerationKind {prop_data['uri']}:{prop_data['name']} ;\n"
+            prop_str = f"    {S223_URI}:hasEnumerationKind {prop_data['uri']}:{prop_data['name']} ;\n"
 
-        result_str = f"{self.local_prefix}:{prop_id} a s223:{prop_type} ;\n"
+        result_str = f"{self.local_prefix}:{prop_id} a {S223_URI}:{prop_type} ;\n"
         if value: # skip if value is None
-            result_str = f"    s223:hasValue {value} ;\n"
+            result_str = f"    {S223_URI}:hasValue {value} ;\n"
         
         # contents may be impossible to automatically discern for nodes, hence this check
         if contents is not None:
@@ -200,12 +203,12 @@ class PyPES2WaTr:
             medium_dict = self.convert_contents(contents)
             medium_name = medium_dict[NAME_KEY]
             medium_uri = medium_dict[URI_KEY]
-            result_str += f"    s223:ofMedium {medium_uri}:{medium_name} ;\n"
+            result_str += f"    {S223_URI}:ofMedium {medium_uri}:{medium_name} ;\n"
             role = medium_dict.get("role")
             if role is not None:
                 role_name = role
                 role_uri = medium_dict["role-uri"]
-                result_str += f"    s223:hasRole {medium_dict["role-uri"]}:{role} ;\n"
+                result_str += f"    {S223_URI}:hasRole {medium_dict["role-uri"]}:{role} ;\n"
             else:
                 role_name, role_uri = None, None
         else:
@@ -214,12 +217,12 @@ class PyPES2WaTr:
         result_str += prop_str
         substance_name = prop_data.get("substance")
         if substance_name:
-            result_str += f"    s223:ofSubstance s223:{substance} ;\n"
+            result_str += f"    {S223_URI}:ofSubstance {S223_URI}:{substance} ;\n"
         else:
             substance_uri = None
         
         if converted_units:
-            result_str += f"    s223:hasUnit {units_uri}:{converted_units} .\n"
+            result_str += f"    {S223_URI}:hasUnit {units_uri}:{converted_units} .\n"
         else: # if no units, change the closing `;` to `.`
             result_str = result_str[:-2] + ".\n"
 
@@ -275,20 +278,20 @@ class PyPES2WaTr:
             prop_str = f"    qudt:hasQuantityKind {prop_data[URI_KEY]}:{prop_data[NAME_KEY]} ;\n"
         else:
             prop_type = "EnumeratedObservableProperty"
-            prop_str = f"    S223:hasEnumerationKind {prop_data[URI_KEY]}:{prop_data[NAME_KEY]} ;\n"
+            prop_str = f"    {S223_URI}:hasEnumerationKind {prop_data[URI_KEY]}:{prop_data[NAME_KEY]} ;\n"
         
-        result_str = f"{self.local_prefix}:{tag_id} a s223:{prop_type} ;\n"
+        result_str = f"{self.local_prefix}:{tag_id} a {S223_URI}:{prop_type} ;\n"
         if tag.contents:
             # TODO: should Role be applied elsewhere or does it make sense in the property itself?
             medium_dict = self.convert_contents(tag.contents)
             medium_name = medium_dict[NAME_KEY]
             medium_uri = medium_dict[URI_KEY]
-            result_str += f"    s223:ofMedium {medium_uri}:{medium_name} ;\n"
+            result_str += f"    {S223_URI}:ofMedium {medium_uri}:{medium_name} ;\n"
             role = medium_dict.get("role")
             if role is not None:
                 role_name = role
                 role_uri = medium_dict["role-uri"]
-                result_str += f"    s223:hasRole {medium_dict["role-uri"]}:{role} ;\n"
+                result_str += f"    {S223_URI}:hasRole {medium_dict["role-uri"]}:{role} ;\n"
             else:
                 role_name, role_uri = None, None
         else:
@@ -297,12 +300,12 @@ class PyPES2WaTr:
         result_str += prop_str
         substance_name = prop_data.get("substance")
         if substance_name:
-            result_str += f"    s223:ofSubstance s223:{substance} ;\n"
+            result_str += f"    {S223_URI}:ofSubstance {S223_URI}:{substance} ;\n"
         else:
             substance_uri = None
         
         if converted_units:
-            result_str += f"    s223:hasUnit {unit_uri}:{converted_units} .\n"
+            result_str += f"    {S223_URI}:hasUnit {unit_uri}:{converted_units} .\n"
         else: # if no units, change the closing `;` to `.`
             result_str = result_str[:-2] + ".\n"
 
@@ -330,6 +333,9 @@ class PyPES2WaTr:
         node_data = self.mapping[TOP_LEVEL_KEY]["nodes"][pypes_class]
         node_id = node.id.replace(" ", "-")
         node_str = f"{self.local_prefix}:{node_id} a {node_data[URI_KEY]}:{node_data[NAME_KEY]} ;\n"
+
+        if node_data.get(PROCESS_KEY):
+            node_str += f"    {WATR_URI}:hasProcess {WATR_URI}:{node_data[PROCESS_KEY]} ;\n"
         
         # TODO: add handling of source and destination unit IDs to below logic
         conn_point_list = []
@@ -343,25 +349,27 @@ class PyPES2WaTr:
                 conn_point_list.append(self.conn_dict[conn_id]["dest_conn_point"])
                 conn_from_list.append(self.conn_dict[conn_id]["source"])
                 conn_point_in = self.conn_dict[conn_id]["dest_conn_point"]
-                # node_str += f"    s223:connectedFrom {self.local_prefix}:{self.conn_dict[conn_id]["source"]} ;\n"
+                # node_str += f"    {S223_URI}:connectedFrom {self.local_prefix}:{self.conn_dict[conn_id]["source"]} ;\n"
             elif self.conn_dict[conn_id]["source"] == node.id:
                 conn_point_list.append(self.conn_dict[conn_id]["source_conn_point"])
                 conn_to_list.append(self.conn_dict[conn_id]["destination"])
                 conn_point_out = self.conn_dict[conn_id]["source_conn_point"]
-                # node_str += f"    s223:connectedTo {self.local_prefix}:{self.conn_dict[conn_id]["destination"]} ;\n"
+                # node_str += f"    {S223_URI}:connectedTo {self.local_prefix}:{self.conn_dict[conn_id]["destination"]} ;\n"
             else:
                 raise ValueError("Connection `source` or `destination` must match node `id`")
         
-        # TODO: how to handle if there are three connection points?
-        # TODO: is this `cnx` necessary? I saw it from the examples, but am not sure
-        if conn_point_in and conn_point_out:
-            node_str += f"    s223:cnx {self.local_prefix}:{conn_point_in}, {self.local_prefix}:{conn_point_out} ;\n"
+            # TODO: how to handle if there are three connection points?
+            # TODO: is this `cnx` necessary? I saw it from the examples, but am not sure
+            if conn_point_in and conn_point_out:
+                node_str += f"    {S223_URI}:cnx {self.local_prefix}:{conn_point_in}, {self.local_prefix}:{conn_point_out} ;\n"
+                conn_point_in = None
+                conn_point_out = None
         conn_point_str = ""
         for conn_point in conn_point_list:
             if conn_point_str:
                 conn_point_str += f", {self.local_prefix}:{conn_point}"
             else:
-                conn_point_str += f"    s223:hasConnectionPoint {self.local_prefix}:{conn_point}"
+                conn_point_str += f"    {S223_URI}:hasConnectionPoint {self.local_prefix}:{conn_point}"
         if conn_point_str:
             conn_point_str += " ;\n"
             node_str += conn_point_str
@@ -372,7 +380,7 @@ class PyPES2WaTr:
             medium_name = medium_dict[NAME_KEY]
             medium_uri = medium_dict[URI_KEY]
             if medium_name not in media_added:
-                node_str += f"    s223:hasMedium {medium_uri}:{medium_name} ;\n"
+                node_str += f"    {S223_URI}:hasMedium {medium_uri}:{medium_name} ;\n"
                 media_added.append(medium_name)
 
         for prop_name, prop_val in node.__dict__.items(): # get all attributes
@@ -395,7 +403,7 @@ class PyPES2WaTr:
             # NOTE: we have to use unmodified `node.id` NOT `node_id` to be consistent with `property_dict`
             if prop_attrs["parent_id"] == node.id:
                 if prop_str is None:
-                    prop_str = f"    s223:hasProperty {self.local_prefix}:{prop_id}"
+                    prop_str = f"    {S223_URI}:hasProperty {self.local_prefix}:{prop_id}"
                 else:
                     prop_str += f", {self.local_prefix}:{prop_id}"
         if prop_str: # if not None, add the closing period
@@ -431,18 +439,18 @@ class PyPES2WaTr:
 
         conn_str = f"{self.local_prefix}:{conn_id} a {conn_data[URI_KEY]}:{conn_data[NAME_KEY]} ;\n"
         source_conn_point, dest_conn_point = self.create_conn_points(conn)
-        conn_str += f"    s223:cnx {self.local_prefix}:{source_conn_point}, {self.local_prefix}:{dest_conn_point} ;\n"
+        conn_str += f"    {S223_URI}:cnx {self.local_prefix}:{source_conn_point}, {self.local_prefix}:{dest_conn_point} ;\n"
 
         # TODO: should Role be applied elsewhere or does it make sense in the connection?
         medium_dict = self.convert_contents(conn.contents)
         medium_name = medium_dict[NAME_KEY]
         medium_uri = medium_dict[URI_KEY]
-        conn_str += f"    s223:hasMedium {medium_uri}:{medium_name} ;\n"
+        conn_str += f"    {S223_URI}:hasMedium {medium_uri}:{medium_name} ;\n"
         role = medium_dict.get("role")
         if role is not None:
             role_name = role
             role_uri = medium_dict["role-uri"]
-            conn_str += f"    s223:hasRole {medium_dict["role-uri"]}:{role} ;\n"
+            conn_str += f"    {S223_URI}:hasRole {medium_dict["role-uri"]}:{role} ;\n"
         else:
             role_name, role_uri = None, None
 
@@ -469,7 +477,7 @@ class PyPES2WaTr:
             # NOTE: we have to use unmodified `conn.id` NOT `node_id` to be consistent with `property_dict`
             if prop_attrs["parent_id"] == conn.id:
                 if prop_str is None:
-                    prop_str = f"    s223:hasProperty {self.local_prefix}:{prop_id}"
+                    prop_str = f"    {S223_URI}:hasProperty {self.local_prefix}:{prop_id}"
                 else:
                     prop_str += f", {self.local_prefix}:{prop_id}"
         if prop_str: # if not None, add the closing period

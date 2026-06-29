@@ -62,14 +62,15 @@
                 "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
             },
             "Digestion": {
-                "name": "Process-Digestion",
+                "name": "Digester",
                 "uri": "watr",
-                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/processtypes.ttl"
+                "process": "Process-Digestion",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
             },
             "Cogeneration": {
-                "name": "Process-Cogeneration",
+                "name": "Cogenerator",
                 "uri": "watr",
-                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/processtypes.ttl"
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
             },
             "Boiler": {
                 "name": "Boiler",
@@ -77,24 +78,28 @@
                 "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
             },
             "Clarification": {
-                "name": "Process-Sedimentation",
+                "name": "SedimentationTank",
                 "uri": "watr",
-                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/processtypes.ttl"
+                "process": "Process-Sedimentation",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
             },
             "Filtration": {
-                "name": "Process-Filtration",
+                "name": "Filter",
                 "uri": "watr",
-                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/processtypes.ttl"
+                "process": "Process-Filtration",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
             },
             "ROMembrane": {
-                "name": "Process-ReverseOsmosis",
+                "name": "ReverseOsmosisMembrane",
                 "uri": "watr",
-                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/processtypes.ttl"
+                "process": "Process-ReverseOsmosis",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
             },
             "Screening": {
-                "name": "Process-Screening",
+                "name": "Screen",
                 "uri": "watr",
-                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/processtypes.ttl"
+                "process": "Process-Screening",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
             },
             "Conditioning": {
                 "name": "Conditioner",
@@ -104,6 +109,7 @@
             "Thickening": {
                 "name": "Thickener",
                 "uri": "watr",
+                "process": "Process-Thickening",
                 "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
             },
             "Aeration": {
@@ -112,19 +118,22 @@
                 "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
             },
             "Disinfection": {
-                "name": "Process-Disinfection",
+                "name": "DisinfectionUnit",
                 "uri": "watr",
-                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/processtypes.ttl"
+                "process": "Process-Disinfection",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
             },
             "Chlorination": {
-                "name": "Process-Chlorination",
+                "name": "ChlorinationUnit",
                 "uri": "watr",
-                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/processtypes.ttl"
+                "process": "Process-Chlorination",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
             },
             "UVSystem": {
-                "name": "Process-UVDisinfection",
+                "name": "UltravioletLightUnit",
                 "uri": "watr",
-                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/processtypes.ttl"
+                "process": "Process-UVDisinfection",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
             },
             "Flaring": {
                 "name": "Flare",
@@ -132,9 +141,10 @@
                 "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
             },
             "Separator": {
-                "name": "Process-Separation",
+                "name": "SeparationTank",
                 "uri": "watr",
-                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/processtypes.ttl"
+                "process": "Process-Separation",
+                "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/water/equipment.ttl"
             }
         },
         "connections": {

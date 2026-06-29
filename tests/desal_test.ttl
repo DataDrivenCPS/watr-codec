@@ -9,30 +9,25 @@
 
 dsl: a owl:Ontology .
 
-dsl:FIT_400_002A_P.PV a s223:QuantifiableObservableProperty ;
+dsl:P_400_002A_P.RPM_MV a s223:QuantifiableObservableProperty ;
     s223:ofMedium watr:Water-Brine ;
-    qudt:hasQuantityKind qudtqk:VolumeFlowRate ;
-    s223:hasUnit unit:GAL_US-PER-MIN .
-
-dsl:FIT_400_001A_P.PV a s223:QuantifiableObservableProperty ;
-    s223:ofMedium watr:Water-Brine ;
-    qudt:hasQuantityKind qudtqk:VolumeFlowRate ;
-    s223:hasUnit unit:GAL_US-PER-MIN .
+    qudt:hasQuantityKind qudtqk:Speed ;
+    s223:hasUnit unit:HZ .
 
 dsl:AIT_400_001A_P.PV a s223:QuantifiableObservableProperty ;
     s223:ofMedium watr:Water-Brine ;
     qudt:hasQuantityKind qudtqk:ElectricConductivity ;
     s223:hasUnit unit:MicroS-PER-CentiM .
 
-dsl:P_400_002A_P.RPM_MV a s223:QuantifiableObservableProperty ;
-    s223:ofMedium watr:Water-Brine ;
-    qudt:hasQuantityKind qudtqk:Speed ;
-    s223:hasUnit unit:HZ .
-
 dsl:P_400_001A_P.RPM_MV a s223:QuantifiableObservableProperty ;
     s223:ofMedium watr:Water-Brine ;
     qudt:hasQuantityKind qudtqk:Speed ;
     s223:hasUnit unit:HZ .
+
+dsl:FIT_400_001A_P.PV a s223:QuantifiableObservableProperty ;
+    s223:ofMedium watr:Water-Brine ;
+    qudt:hasQuantityKind qudtqk:VolumeFlowRate ;
+    s223:hasUnit unit:GAL_US-PER-MIN .
 
 dsl:PIT_400_003A_P.PV a s223:QuantifiableObservableProperty ;
     s223:ofMedium watr:Water-Brine ;
@@ -43,6 +38,11 @@ dsl:PDIT_400_002A_P.PV a s223:QuantifiableObservableProperty ;
     s223:ofMedium watr:Water-Brine ;
     qudt:hasQuantityKind qudtqk:Pressure ;
     s223:hasUnit unit:PSI .
+
+dsl:FIT_400_002A_P.PV a s223:QuantifiableObservableProperty ;
+    s223:ofMedium watr:Water-Brine ;
+    qudt:hasQuantityKind qudtqk:VolumeFlowRate ;
+    s223:hasUnit unit:GAL_US-PER-MIN .
 
 dsl:InputToHPPumpdiameter a s223:QuantifiableProperty ;
     s223:ofMedium watr:Water-Brine ;
@@ -182,7 +182,7 @@ dsl:SWROToOutput a s223:Pipe ;
     s223:cnx dsl:SWRO-cp-4, dsl:Output-cp-1 ;
     s223:hasMedium s223:Fluid-Water ;
     s223:hasRole watr:Role-Permeate ;
-    s223:hasProperty dsl:FIT_400_002A_P.PV, dsl:AIT_400_001A_P.PV, dsl:SWROToOutputdiameter, dsl:SWROToOutputfriction_coeff .
+    s223:hasProperty dsl:AIT_400_001A_P.PV, dsl:FIT_400_002A_P.PV, dsl:SWROToOutputdiameter, dsl:SWROToOutputfriction_coeff .
 
 dsl:Input-cp-1 a s223:OutletConnectionPoint ;
     s223:isConnectionPointOf dsl:Input ;
@@ -266,84 +266,41 @@ dsl:Output-cp-1 a s223:InletConnectionPoint ;
     s223:hasMedium s223:Fluid-Water ;
     s223:hasRole watr:Role-Permeate .
 
-dsl:Input-cp-1 a s223:OutletConnectionPoint ;
-    s223:isConnectionPointOf dsl:Input ;
-    s223:connectsThrough dsl:InputToHPPump ;
-    s223:hasMedium watr:Water-Brine .
+dsl:Input a watr:Tank ;
+    s223:hasConnectionPoint dsl:Input-cp-1, dsl:Input-cp-2 ;
+    s223:hasMedium watr:Water-Brine ;
+    s223:hasProperty dsl:Inputelevation, dsl:Inputvolume .
 
-dsl:HPPump-cp-1 a s223:InletConnectionPoint ;
-    s223:isConnectionPointOf dsl:HPPump ;
-    s223:connectsThrough dsl:InputToHPPump ;
-    s223:hasMedium watr:Water-Brine .
+dsl:HPPump a watr:Pump ;
+    s223:cnx dsl:HPPump-cp-1, dsl:HPPump-cp-2 ;
+    s223:hasConnectionPoint dsl:HPPump-cp-1, dsl:HPPump-cp-2 ;
+    s223:hasMedium watr:Water-Brine ;
+    s223:hasProperty dsl:P_400_002A_P.RPM_MV, dsl:PIT_400_003A_P.PV, dsl:HPPumpelevation .
 
-dsl:Input-cp-2 a s223:OutletConnectionPoint ;
-    s223:isConnectionPointOf dsl:Input ;
-    s223:connectsThrough dsl:InputToERI ;
-    s223:hasMedium watr:Water-Brine .
+dsl:SWRO a watr:Process-ReverseOsmosis ;
+    s223:cnx dsl:SWRO-cp-3, dsl:SWRO-cp-4 ;
+    s223:hasConnectionPoint dsl:SWRO-cp-1, dsl:SWRO-cp-2, dsl:SWRO-cp-3, dsl:SWRO-cp-4 ;
+    s223:hasMedium watr:Water-Brine ;
+    s223:hasProperty dsl:SWROvolume, dsl:SWROpermeability .
 
-dsl:ERI-cp-1 a s223:InletConnectionPoint ;
-    s223:isConnectionPointOf dsl:ERI ;
-    s223:connectsThrough dsl:InputToERI ;
-    s223:hasMedium watr:Water-Brine .
+dsl:ERI a watr:Pump ;
+    s223:cnx dsl:ERI-cp-4, dsl:ERI-cp-3 ;
+    s223:hasConnectionPoint dsl:ERI-cp-1, dsl:ERI-cp-2, dsl:ERI-cp-3, dsl:ERI-cp-4 ;
+    s223:hasMedium watr:Water-Brine ;
+    s223:hasProperty dsl:ERIelevation .
 
-dsl:HPPump-cp-2 a s223:OutletConnectionPoint ;
-    s223:isConnectionPointOf dsl:HPPump ;
-    s223:connectsThrough dsl:HPPumpToSWRO ;
-    s223:hasMedium watr:Water-Brine .
+dsl:CirculationPump a watr:Pump ;
+    s223:cnx dsl:CirculationPump-cp-1, dsl:CirculationPump-cp-2 ;
+    s223:hasConnectionPoint dsl:CirculationPump-cp-1, dsl:CirculationPump-cp-2 ;
+    s223:hasMedium watr:Water-Brine ;
+    s223:hasProperty dsl:P_400_001A_P.RPM_MV, dsl:PDIT_400_002A_P.PV, dsl:CirculationPumpelevation .
 
-dsl:SWRO-cp-1 a s223:InletConnectionPoint ;
-    s223:isConnectionPointOf dsl:SWRO ;
-    s223:connectsThrough dsl:HPPumpToSWRO ;
-    s223:hasMedium watr:Water-Brine .
+dsl:WasteWaterSump a watr:Tank ;
+    s223:hasConnectionPoint dsl:WasteWaterSump-cp-1 ;
+    s223:hasMedium watr:Water-Brine ;
+    s223:hasProperty dsl:WasteWaterSumpelevation, dsl:WasteWaterSumpvolume .
 
-dsl:ERI-cp-2 a s223:OutletConnectionPoint ;
-    s223:isConnectionPointOf dsl:ERI ;
-    s223:connectsThrough dsl:ERIToCirculationPump ;
-    s223:hasMedium watr:Water-Brine .
-
-dsl:CirculationPump-cp-1 a s223:InletConnectionPoint ;
-    s223:isConnectionPointOf dsl:CirculationPump ;
-    s223:connectsThrough dsl:ERIToCirculationPump ;
-    s223:hasMedium watr:Water-Brine .
-
-dsl:ERI-cp-3 a s223:OutletConnectionPoint ;
-    s223:isConnectionPointOf dsl:ERI ;
-    s223:connectsThrough dsl:ERIToWasewaterSump ;
-    s223:hasMedium watr:Water-Brine .
-
-dsl:WasteWaterSump-cp-1 a s223:InletConnectionPoint ;
-    s223:isConnectionPointOf dsl:WasteWaterSump ;
-    s223:connectsThrough dsl:ERIToWasewaterSump ;
-    s223:hasMedium watr:Water-Brine .
-
-dsl:SWRO-cp-2 a s223:OutletConnectionPoint ;
-    s223:isConnectionPointOf dsl:SWRO ;
-    s223:connectsThrough dsl:SWROToERI ;
-    s223:hasMedium watr:Water-Brine .
-
-dsl:ERI-cp-4 a s223:InletConnectionPoint ;
-    s223:isConnectionPointOf dsl:ERI ;
-    s223:connectsThrough dsl:SWROToERI ;
-    s223:hasMedium watr:Water-Brine .
-
-dsl:CirculationPump-cp-2 a s223:OutletConnectionPoint ;
-    s223:isConnectionPointOf dsl:CirculationPump ;
-    s223:connectsThrough dsl:CirculationPumpToSWRO ;
-    s223:hasMedium watr:Water-Brine .
-
-dsl:SWRO-cp-3 a s223:InletConnectionPoint ;
-    s223:isConnectionPointOf dsl:SWRO ;
-    s223:connectsThrough dsl:CirculationPumpToSWRO ;
-    s223:hasMedium watr:Water-Brine .
-
-dsl:SWRO-cp-4 a s223:OutletConnectionPoint ;
-    s223:isConnectionPointOf dsl:SWRO ;
-    s223:connectsThrough dsl:SWROToOutput ;
+dsl:Output a watr:Tank ;
+    s223:hasConnectionPoint dsl:Output-cp-1 ;
     s223:hasMedium s223:Fluid-Water ;
-    s223:hasRole watr:Role-Permeate .
-
-dsl:Output-cp-1 a s223:InletConnectionPoint ;
-    s223:isConnectionPointOf dsl:Output ;
-    s223:connectsThrough dsl:SWROToOutput ;
-    s223:hasMedium s223:Fluid-Water ;
-    s223:hasRole watr:Role-Permeate .
+    s223:hasProperty dsl:Outputelevation, dsl:Outputvolume .

@@ -355,11 +355,11 @@ class PyPES2WaTr:
         # TODO: how to handle if there are three connection points?
         # TODO: is this `cnx` necessary? I saw it from the examples, but am not sure
         if conn_point_in and conn_point_out:
-            node_str += f"    s223:cnx {self.local_prefix}:{conn_point_in} {self.local_prefix}:{conn_point_out} ;\n"
+            node_str += f"    s223:cnx {self.local_prefix}:{conn_point_in}, {self.local_prefix}:{conn_point_out} ;\n"
         conn_point_str = ""
         for conn_point in conn_point_list:
             if conn_point_str:
-                conn_point_str += f" {self.local_prefix}:{conn_point}"
+                conn_point_str += f", {self.local_prefix}:{conn_point}"
             else:
                 conn_point_str += f"    s223:hasConnectionPoint {self.local_prefix}:{conn_point}"
         if conn_point_str:
@@ -525,7 +525,7 @@ class PyPES2WaTr:
             result += "\n" + conn_data["ttl_str"]
         for conn_point_data in self.conn_point_dict.values():
             result += "\n" + conn_point_data["ttl_str"]
-        for node_data in self.conn_point_dict.values():
+        for node_data in self.node_dict.values():
             result += "\n" + node_data["ttl_str"]
 
         with open(outpath, "w", encoding="utf-8") as file:

@@ -132,8 +132,8 @@ class PyPES2WaTr:
         dest_str += f"    {S223_URI}:hasMedium {medium_uri}:{medium_name} ;\n"
         role = medium_dict.get("role")
         if role:
-            source_str += f"    {S223_URI}:hasRole {medium_dict["role-uri"]}:{role} .\n"
-            dest_str += f"    {S223_URI}:hasRole {medium_dict["role-uri"]}:{role} .\n"
+            source_str += f"    {S223_URI}:hasRole {medium_dict['role-uri']}:{role} .\n"
+            dest_str += f"    {S223_URI}:hasRole {medium_dict['role-uri']}:{role} .\n"
         else: # if no role, change the closing `;` to `.`
             source_str = source_str[:-2] + ".\n"
             dest_str = dest_str[:-2] + ".\n"
@@ -150,6 +150,59 @@ class PyPES2WaTr:
             "ttl_str": dest_str,
         }
         return source_name, dest_name
+
+    def create_missing_conn_point(self, node_id: str, conn_point_class: str, contents, start_num: int = 1):
+        """Creates a connection point for a node that has no corresponding PyPES
+        connection (e.g. a `Tank` with no inlet or outlet pipe). This point has no
+        `connectsThrough`, since there is no PyPES connection to reference.
+
+        Parameters
+        ----------
+        node_id : str
+            id of the node (already sanitized, i.e. spaces replaced) that owns
+            this connection point
+
+        conn_point_class : str
+            fully qualified (prefixed) s223 class of the connection point,
+            e.g. `s223:InletConnectionPoint`
+
+        contents : utils.ContentsType or list of utils.ContentsType
+            contents flowing through the missing connection point, used to
+            determine `hasMedium`/`hasRole`. May be empty/None if unknown.
+
+        start_num : int
+            the connection point number to try first (falling back to the next
+            available number on collision). Used so that a silently-created
+            inlet is always named `-cp-0` regardless of how many real
+            (numbered starting at 1) connection points the node already has.
+        """
+        name = self.generate_conn_point_name(node_id + "-cp-" + str(start_num))
+        conn_point_str = f"{self.local_prefix}:{name} a {conn_point_class} ;\n"
+        conn_point_str += f"    {S223_URI}:isConnectionPointOf {self.local_prefix}:{node_id} ;\n"
+
+        # contents may be a list (e.g. `node.input_contents`) or a single value
+        if isinstance(contents, list):
+            contents = contents[0] if contents else None
+
+        if contents is not None:
+            medium_dict = self.convert_contents(contents)
+            medium_name = medium_dict[NAME_KEY]
+            medium_uri = medium_dict[URI_KEY]
+            conn_point_str += f"    {S223_URI}:hasMedium {medium_uri}:{medium_name} ;\n"
+            role = medium_dict.get("role")
+            if role:
+                conn_point_str += f"    {S223_URI}:hasRole {medium_dict['role-uri']}:{role} .\n"
+            else: # if no role, change the closing `;` to `.`
+                conn_point_str = conn_point_str[:-2] + ".\n"
+        else: # if no known contents, change the closing `;` to `.`
+            conn_point_str = conn_point_str[:-2] + ".\n"
+
+        self.conn_point_dict[name] = {
+            "node": node_id,
+            "connection": None,
+            "ttl_str": conn_point_str,
+        }
+        return name
 
     def translate_attribute(self, attr_name, value, parent_id, contents=None):
         """Converts an attribute from a PyPES node or connection to a WaTr property.
@@ -208,7 +261,7 @@ class PyPES2WaTr:
             if role is not None:
                 role_name = role
                 role_uri = medium_dict["role-uri"]
-                result_str += f"    {S223_URI}:hasRole {medium_dict["role-uri"]}:{role} ;\n"
+                result_str += f"    {S223_URI}:hasRole {medium_dict['role-uri']}:{role} ;\n"
             else:
                 role_name, role_uri = None, None
         else:
@@ -291,7 +344,7 @@ class PyPES2WaTr:
             if role is not None:
                 role_name = role
                 role_uri = medium_dict["role-uri"]
-                result_str += f"    {S223_URI}:hasRole {medium_dict["role-uri"]}:{role} ;\n"
+                result_str += f"    {S223_URI}:hasRole {medium_dict['role-uri']}:{role} ;\n"
             else:
                 role_name, role_uri = None, None
         else:
@@ -343,27 +396,51 @@ class PyPES2WaTr:
         conn_to_list = []
         conn_point_in = None
         conn_point_out = None
-        for conn_id in self.node_to_conn_ids[node.id]:
+        has_inlet = False
+        has_outlet = False
+        # NOTE: use `.get` since PyPES allows nodes (e.g. `Tank`) with no connections at all
+        for conn_id in self.node_to_conn_ids.get(node.id, []):
             # TODO: double check below logic
             if self.conn_dict[conn_id]["destination"] == node.id:
                 conn_point_list.append(self.conn_dict[conn_id]["dest_conn_point"])
                 conn_from_list.append(self.conn_dict[conn_id]["source"])
                 conn_point_in = self.conn_dict[conn_id]["dest_conn_point"]
+                has_inlet = True
                 # node_str += f"    {S223_URI}:connectedFrom {self.local_prefix}:{self.conn_dict[conn_id]["source"]} ;\n"
             elif self.conn_dict[conn_id]["source"] == node.id:
                 conn_point_list.append(self.conn_dict[conn_id]["source_conn_point"])
                 conn_to_list.append(self.conn_dict[conn_id]["destination"])
                 conn_point_out = self.conn_dict[conn_id]["source_conn_point"]
+                has_outlet = True
                 # node_str += f"    {S223_URI}:connectedTo {self.local_prefix}:{self.conn_dict[conn_id]["destination"]} ;\n"
             else:
                 raise ValueError("Connection `source` or `destination` must match node `id`")
-        
+
             # TODO: how to handle if there are three connection points?
             # TODO: is this `cnx` necessary? I saw it from the examples, but am not sure
             if conn_point_in and conn_point_out:
                 node_str += f"    {S223_URI}:cnx {self.local_prefix}:{conn_point_in}, {self.local_prefix}:{conn_point_out} ;\n"
                 conn_point_in = None
                 conn_point_out = None
+
+        # WaTr's SHACL shapes require `Tank` objects to have both an inlet and an
+        # outlet connection point, but PyPES allows tanks with no connections (or
+        # with connections in only one direction). Silently create whichever
+        # connection point(s) are missing so the exported graph stays valid.
+        if pypes_class == "Tank":
+            if not has_inlet:
+                # NOTE: `start_num=0` reserves `-cp-0` as the conventional name
+                # for a silently-created inlet, distinct from real (>=1) points
+                inlet_name = self.create_missing_conn_point(
+                    node_id, f"{S223_URI}:InletConnectionPoint", node.input_contents, start_num=0
+                )
+                conn_point_list.append(inlet_name)
+            if not has_outlet:
+                outlet_name = self.create_missing_conn_point(
+                    node_id, f"{S223_URI}:OutletConnectionPoint", node.output_contents
+                )
+                conn_point_list.append(outlet_name)
+
         conn_point_str = ""
         for conn_point in conn_point_list:
             if conn_point_str:
@@ -450,7 +527,7 @@ class PyPES2WaTr:
         if role is not None:
             role_name = role
             role_uri = medium_dict["role-uri"]
-            conn_str += f"    {S223_URI}:hasRole {medium_dict["role-uri"]}:{role} ;\n"
+            conn_str += f"    {S223_URI}:hasRole {medium_dict['role-uri']}:{role} ;\n"
         else:
             role_name, role_uri = None, None
 

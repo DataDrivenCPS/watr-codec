@@ -38,6 +38,7 @@ CUSTOM_HANDLED_ATTRIBUTES = [
     "entry_point",
 ]
 
+# TODO: implement conversion of the below attributes
 NOT_YET_IMPLEMENTED_ATTRIBUTES = [
     "heating_values",
     "pressure",
@@ -53,10 +54,27 @@ NOT_YET_IMPLEMENTED_ATTRIBUTES = [
 
 
 class NotImplementedWarning(UserWarning):
+    """Warning category raised when a PyPES attribute has no WaTr translation yet.
+
+    Used instead of a generic ``UserWarning`` so callers can filter or assert
+    on exactly these "not yet implemented" notices without also catching
+    unrelated warnings raised by pype_schema or other dependencies.
+    """
+
     pass
 
 
 class PyPES2WaTr:
+    """Translates a pype_schema PyPES network into a WaTr semantic graph.
+
+    An instance walks a `pype_schema.node.Network` (and any nodes,
+    connections, and tags nested inside it), converts each piece into the
+    corresponding WaTr/S223/QUDT terms using the mapping data in
+    `pypes_watr_mapping.json`, and accumulates the resulting triples in an
+    internal `SemanticModel`. The translation only happens once; the first
+    call to `to_graph` (or `export_ttl`) performs it and caches the result.
+    """
+
     def __init__(
         self,
         network: Network,
@@ -64,6 +82,22 @@ class PyPES2WaTr:
         mapping_path=WATR_CODEC_DIR + "/data/pypes_watr_mapping.json",
         uri_mapping_path=WATR_CODEC_DIR + "/data/uri_mapping.json",
     ):
+        """Create a translator bound to a PyPES network and mapping data.
+
+        Parameters
+        ----------
+        network : pype_schema.node.Network
+            The (possibly nested) PyPES facility/network to translate.
+        local_prefix : str
+            RDF namespace prefix used for terms minted for this facility
+            (e.g. node, connection, and property IRIs).
+        mapping_path : str, optional
+            Path to the PyPES-to-WaTr JSON mapping file. Defaults to
+            `data/pypes_watr_mapping.json` bundled with this package.
+        uri_mapping_path : str, optional
+            Path to the JSON file mapping URI prefixes to namespace IRIs.
+            Defaults to `data/uri_mapping.json` bundled with this package.
+        """
         self.world = network
         self.local_prefix = local_prefix
         with open(mapping_path, "r", encoding="utf-8") as file:
@@ -80,42 +114,201 @@ class PyPES2WaTr:
         self._translated = False
 
     def _sanitize_id(self, value: str) -> str:
+        """Turn a PyPES ID into a string that is safe to use as an IRI suffix.
+
+        Parameters
+        ----------
+        value : str
+            Raw PyPES object ID, which may contain spaces.
+
+        Returns
+        -------
+        str
+            `value` with any spaces replaced by dashes.
+        """
         return value.replace(" ", "-")
 
     def _local(self, name: str = "") -> SemanticTerm:
+        """Build a term in this facility's local namespace.
+
+        Parameters
+        ----------
+        name : str, optional
+            Local name to append to the local namespace. Defaults to the
+            empty string, which yields the namespace's root term (used to
+            represent the ontology itself).
+
+        Returns
+        -------
+        SemanticTerm
+            Term for `name` in the local namespace.
+        """
         return self.model.local(name)
 
     def _term(self, data: dict) -> SemanticTerm:
+        """Build a term from a mapping-file entry's URI prefix and name.
+
+        Parameters
+        ----------
+        data : dict
+            A mapping-file entry containing at least `"uri"` and `"name"`
+            keys (e.g. an entry from `nodes`, `contents_types`,
+            `attributes`, or `tag_types` in `pypes_watr_mapping.json`).
+
+        Returns
+        -------
+        SemanticTerm
+            Term identified by `data["uri"]:data["name"]`.
+        """
         return self.model.term(data[URI_KEY], data[NAME_KEY])
 
     def _predicate(self, prefix: str, name: str) -> SemanticTerm:
+        """Build a predicate term from a namespace prefix and local name.
+
+        Parameters
+        ----------
+        prefix : str
+            Namespace prefix (e.g. `"s223"`, `"qudt"`, `"watr"`).
+        name : str
+            Local name of the predicate within that namespace.
+
+        Returns
+        -------
+        SemanticTerm
+            Term identified by `prefix:name`.
+        """
         return self.model.predicate(prefix, name)
 
     def _add_relation(
         self, subject: SemanticTerm, prefix: str, name: str, obj: SemanticTerm
     ):
+        """Add a single (subject, predicate, object) triple to the graph.
+
+        Parameters
+        ----------
+        subject : SemanticTerm
+            Subject of the triple.
+        prefix : str
+            Namespace prefix of the predicate.
+        name : str
+            Local name of the predicate within `prefix`.
+        obj : SemanticTerm
+            Object of the triple.
+        """
         self.model.add(subject, self._predicate(prefix, name), obj)
 
     def get_uri_prefix(self, uri: str):
+        """Look up the namespace IRI registered for a URI prefix.
+
+        Parameters
+        ----------
+        uri : str
+            Short URI prefix, e.g. `"s223"` or `"watr"`.
+
+        Returns
+        -------
+        str
+            The full namespace IRI associated with `uri` in
+            `uri_mapping.json`.
+        """
         return self.uri_mapping[uri]
 
     def convert_units(self, units: pint.Unit):
+        """Look up the WaTr/QUDT unit entry for a Pint unit.
+
+        Parameters
+        ----------
+        units : pint.Unit
+            Unit to translate, as used by pype_schema attributes and tags.
+
+        Returns
+        -------
+        dict
+            The mapping-file entry for `units` (may be an empty dict if the
+            unit is listed but intentionally left unmapped).
+        """
         return self.mapping[TOP_LEVEL_KEY][UNITS_KEY][str(units)]
 
     def convert_contents(self, contents: utils.ContentsType):
+        """Look up the WaTr medium entry for a PyPES contents type.
+
+        Parameters
+        ----------
+        contents : pype_schema.utils.ContentsType
+            PyPES contents type carried by a node, connection, or tag.
+
+        Returns
+        -------
+        dict
+            The mapping-file entry describing the corresponding WaTr medium
+            (and, if applicable, its role).
+        """
         return self.mapping[TOP_LEVEL_KEY]["contents_types"][contents.name]
 
     def convert_attribute(self, attr_name: str):
+        """Look up the WaTr property entry for a PyPES node/connection attribute.
+
+        Parameters
+        ----------
+        attr_name : str
+            Name of the PyPES attribute (e.g. `"diameter"`, `"elevation"`).
+
+        Returns
+        -------
+        prop_dict : dict
+            The mapping-file entry describing the corresponding WaTr
+            property.
+        is_quant_kind : bool
+            True if the property is a quantifiable (QUDT quantity kind)
+            property; False if it is an enumerable property.
+        """
         prop_dict = self.mapping[TOP_LEVEL_KEY]["attributes"][attr_name]
         is_quant_kind = ENUM_KIND_STR not in prop_dict[NAME_KEY]
         return prop_dict, is_quant_kind
 
     def convert_tag_type(self, tag_type: TagType):
+        """Look up the WaTr property entry for a PyPES tag type.
+
+        Parameters
+        ----------
+        tag_type : pype_schema.tag.TagType
+            Type of the SCADA tag being translated (e.g. `TagType.Flow`).
+
+        Returns
+        -------
+        prop_dict : dict
+            The mapping-file entry describing the corresponding WaTr
+            observable property.
+        is_quant_kind : bool
+            True if the property is a quantifiable (QUDT quantity kind)
+            property; False if it is an enumerable property.
+        """
         prop_dict = self.mapping[TOP_LEVEL_KEY]["tag_types"][tag_type.name]
         is_quant_kind = ENUM_KIND_STR not in prop_dict[NAME_KEY]
         return prop_dict, is_quant_kind
 
     def generate_conn_point_name(self, name: str):
+        """Disambiguate a connection-point name against already-used names.
+
+        A node that participates in more than one connection will request
+        the same base name (e.g. `"ERI-cp-1"`) more than once - once per
+        connection it is a source or destination of. When that happens this
+        method appends/increments a numeric suffix (`-cp-2`, `-cp-3`, ...)
+        so every connection point still gets a unique name; it does not
+        change how many connection points get created; every connection
+        still contributes exactly two.
+
+        Parameters
+        ----------
+        name : str
+            Proposed connection-point name, typically `"{node_id}-cp-1"`.
+
+        Returns
+        -------
+        str
+            `name` unchanged if it is not already taken, otherwise `name`
+            with its numeric suffix incremented until it is unique.
+        """
         if name not in self.conn_point_dict:
             return name
 
@@ -128,6 +321,24 @@ class PyPES2WaTr:
     def _add_medium_and_role(
         self, subject: SemanticTerm, medium_dict: dict, medium_predicate: str
     ):
+        """Attach a medium relation (and role relation, if any) to a term.
+
+        # TODO: should Role be applied elsewhere, or does it make sense to
+        # attach it directly to the property/connection point/connection as
+        # done here?
+
+        Parameters
+        ----------
+        subject : SemanticTerm
+            Term the medium (and role) relation should be attached to.
+        medium_dict : dict
+            Mapping-file `contents_types` entry, as returned by
+            `convert_contents`. May optionally include `"role"` and
+            `"role-uri"` keys.
+        medium_predicate : str
+            Local name of the medium predicate to use (e.g. `"hasMedium"`
+            for nodes/connections, `"ofMedium"` for properties).
+        """
         medium = self._term(medium_dict)
         self._add_relation(subject, S223_URI, medium_predicate, medium)
 
@@ -141,6 +352,21 @@ class PyPES2WaTr:
             )
 
     def create_conn_points(self, conn: connection.Connection):
+        """Create the inlet/outlet connection points for a PyPES connection.
+
+        Parameters
+        ----------
+        conn : pype_schema.connection.Connection
+            Connection whose source and destination connection points
+            should be created.
+
+        Returns
+        -------
+        source_name : str
+            Name of the outlet connection point created on `conn.source`.
+        dest_name : str
+            Name of the inlet connection point created on `conn.destination`.
+        """
         source_name = self.generate_conn_point_name(f"{conn.source.id}-cp-1")
         dest_name = self.generate_conn_point_name(f"{conn.destination.id}-cp-1")
         source = self._local(source_name)
@@ -180,7 +406,31 @@ class PyPES2WaTr:
         return source_name, dest_name
 
     def translate_attribute(self, attr_name, value, parent_id, contents=None):
+        """Convert a single PyPES node/connection attribute to a WaTr property.
+
+        Parameters
+        ----------
+        attr_name : str
+            Name of the attribute (e.g. `"diameter"`, `"elevation"`).
+        value : pint.Quantity, float, str, or None
+            Value of the attribute. If it has `.units`/`.magnitude`
+            attributes (i.e. it is a Pint quantity), the units are looked up
+            via `convert_units` and the magnitude is used as the value.
+        parent_id : str
+            ID of the PyPES node or connection this attribute belongs to.
+        contents : pype_schema.utils.ContentsType, optional
+            Contents to associate with this property, when they can be
+            determined for the parent (e.g. a connection's `contents`).
+            Default is None, for cases where contents cannot be
+            automatically determined (e.g. plain node attributes).
+
+        Returns
+        -------
+        dict
+            The entry recorded in `self.property_dict` for this attribute.
+        """
         prop_id = self._sanitize_id(parent_id) + attr_name
+        # TODO: handle dictionary attributes
         unit_dict = {}
         converted_units = None
         unit_uri = None
@@ -253,8 +503,8 @@ class PyPES2WaTr:
             "role_uri": role_uri,
             "substance": substance_name,
             "substance_uri": substance_uri,
-            "source_unit_id": None,
-            "dest_unit_id": None,
+            "source_unit_id": None,  # TODO: use this downstream
+            "dest_unit_id": None,  # TODO: use this downstream
             "is_quant_kind": is_quant_kind,
             UNITS_KEY: unit_dict,
             "term": prop_term,
@@ -262,6 +512,21 @@ class PyPES2WaTr:
         return self.property_dict[prop_id]
 
     def translate_tag(self, tag: Tag):
+        """Convert a PyPES SCADA tag to a WaTr observable property.
+
+        Parameters
+        ----------
+        tag : pype_schema.tag.Tag
+            Tag to translate. `tag.units`, `tag.tag_type`, and
+            `tag.contents` drive the WaTr quantity kind / enumeration kind,
+            unit, and medium relations; `tag.source_unit_id` and
+            `tag.dest_unit_id` are recorded but not yet used downstream.
+
+        Returns
+        -------
+        dict
+            The entry recorded in `self.property_dict` for this tag.
+        """
         tag_id = self._sanitize_id(tag.id)
         parent_id = self._sanitize_id(tag.parent_id)
         unit_dict = {}
@@ -332,8 +597,8 @@ class PyPES2WaTr:
             "role_uri": role_uri,
             "substance": substance_name,
             "substance_uri": substance_uri,
-            "source_unit_id": tag.source_unit_id,
-            "dest_unit_id": tag.dest_unit_id,
+            "source_unit_id": tag.source_unit_id,  # TODO: use this downstream
+            "dest_unit_id": tag.dest_unit_id,  # TODO: use this downstream
             "is_quant_kind": is_quant_kind,
             UNITS_KEY: unit_dict,
             "term": tag_term,
@@ -341,6 +606,19 @@ class PyPES2WaTr:
         return self.property_dict[tag_id]
 
     def _properties_for_parent(self, parent_id: str):
+        """Look up the property terms already translated for a given parent.
+
+        Parameters
+        ----------
+        parent_id : str
+            Raw (unsanitized) ID of the parent node or connection.
+
+        Returns
+        -------
+        list of SemanticTerm
+            Terms of every entry in `self.property_dict` whose `parent_id`
+            matches the sanitized form of `parent_id`.
+        """
         parent_id = self._sanitize_id(parent_id)
         return [
             prop_attrs["term"]
@@ -349,10 +627,43 @@ class PyPES2WaTr:
         ]
 
     def _add_parent_properties(self, parent: SemanticTerm, parent_id: str):
+        """Link a node or connection term to all of its translated properties.
+
+        Parameters
+        ----------
+        parent : SemanticTerm
+            Term for the node or connection that owns the properties.
+        parent_id : str
+            Raw (unsanitized) ID of that node or connection, used to look up
+            its properties via `_properties_for_parent`.
+        """
         for prop_term in self._properties_for_parent(parent_id):
             self._add_relation(parent, S223_URI, "hasProperty", prop_term)
 
     def translate_node(self, node: Node):
+        """Convert a PyPES node into its WaTr type, connections, and properties.
+
+        Parameters
+        ----------
+        node : pype_schema.node.Node
+            Node to translate. Its class name is used to look up the
+            corresponding WaTr type in the mapping file; its
+            `input_contents`/`output_contents` become `hasMedium`
+            relations; its connections (tracked via `node_to_conn_ids`)
+            become `hasConnectionPoint`/`cnx` relations; and any remaining
+            attributes are translated via `translate_attribute`.
+
+        Returns
+        -------
+        dict
+            The entry recorded in `self.node_dict` for this node.
+
+        Raises
+        ------
+        ValueError
+            If a connection tracked against this node does not actually
+            list it as a source or destination.
+        """
         pypes_class = type(node).__name__
         node_data = self.mapping[TOP_LEVEL_KEY]["nodes"][pypes_class]
         node_id = self._sanitize_id(node.id)
@@ -367,6 +678,7 @@ class PyPES2WaTr:
                 self.model.term(WATR_URI, node_data[PROCESS_KEY]),
             )
 
+        # TODO: add handling of source and destination unit IDs to below logic
         conn_point_list = []
         conn_from_list = []
         conn_to_list = []
@@ -375,6 +687,7 @@ class PyPES2WaTr:
 
         for conn_id in self.node_to_conn_ids.get(node.id, []):
             conn_data = self.conn_dict[conn_id]
+            # TODO: double check below logic
             if conn_data["destination"] == node.id:
                 conn_point_list.append(conn_data["dest_conn_point"])
                 conn_from_list.append(conn_data["source"])
@@ -388,6 +701,8 @@ class PyPES2WaTr:
                     "Connection `source` or `destination` must match node `id`"
                 )
 
+            # TODO: how to handle if there are three connection points?
+            # TODO: is this `cnx` necessary? I saw it from the examples, but am not sure
             if conn_point_in and conn_point_out:
                 self._add_relation(
                     node_term, S223_URI, "cnx", self._local(conn_point_in)
@@ -422,9 +737,11 @@ class PyPES2WaTr:
                     NotImplementedWarning,
                 )
                 continue
+            # TODO: try to automatically determine contents
             self.translate_attribute(prop_name, prop_val, node_id, contents=None)
 
         self._add_parent_properties(node_term, node_id)
+        # TODO: add more attributes to below dictionary
         self.node_dict[node_id] = {
             "node": node_data[NAME_KEY],
             "conn_points": conn_point_list,
@@ -435,6 +752,21 @@ class PyPES2WaTr:
         return self.node_dict[node_id]
 
     def translate_connection(self, conn: connection.Connection):
+        """Convert a PyPES connection into its WaTr type, points, and properties.
+
+        Parameters
+        ----------
+        conn : pype_schema.connection.Connection
+            Connection to translate. Its class name is used to look up the
+            corresponding WaTr type in the mapping file; `create_conn_points`
+            builds its inlet/outlet connection points; and any remaining
+            attributes are translated via `translate_attribute`.
+
+        Returns
+        -------
+        dict
+            The entry recorded in `self.conn_dict` for this connection.
+        """
         pypes_class = type(conn).__name__
         conn_id = self._sanitize_id(conn.id)
         conn_data = self.mapping[TOP_LEVEL_KEY]["connections"][pypes_class]
@@ -455,8 +787,11 @@ class PyPES2WaTr:
         role_name = medium_dict.get("role")
         role_uri = medium_dict.get("role-uri") if role_name is not None else None
 
+        # TODO: add logic to handle source and destination unit IDs
+        # TODO: add logic for bidirectional connections
         for prop_name, prop_val in conn.__dict__.items():
             if prop_name in CUSTOM_HANDLED_ATTRIBUTES or prop_name.startswith("_"):
+                # TODO: add logic for dictionary attributes (like flow_rate and gen_capacity)
                 continue
             if prop_name in NOT_YET_IMPLEMENTED_ATTRIBUTES:
                 warnings.warn(
@@ -484,8 +819,19 @@ class PyPES2WaTr:
         return self.conn_dict[conn.id]
 
     def translate_network(self, network: Network):
+        """Recursively translate every tag, connection, and node in a network.
+
+        Parameters
+        ----------
+        network : pype_schema.node.Network
+            Network to translate. Nested `Network` nodes are translated
+            recursively (and, since they are also nodes of their parent
+            network, are additionally translated as nodes in their own
+            right unless `network` is `self.world`).
+        """
         for tag in network.get_all_tags():
             if isinstance(tag, VirtualTag):
+                # TODO: implement VirtualTag to Acquirium soft sensor translator
                 continue
             self.translate_tag(tag)
 
@@ -501,7 +847,18 @@ class PyPES2WaTr:
         if self.world.id != network.id:
             self.translate_node(network)
 
+        # TODO: add contains and isContained logic to network hierarchy
+
     def to_graph(self):
+        """Translate the facility (if not already done) and return its graph.
+
+        Returns
+        -------
+        rdflib.Graph
+            The accumulated semantic graph for `self.world`. Calling this
+            more than once is safe and returns the same graph without
+            re-running the translation.
+        """
         if not self._translated:
             self.model.add_type(self._local(), self.model.term(OWL_URI, "Ontology"))
             self.translate_network(self.world)
@@ -509,6 +866,13 @@ class PyPES2WaTr:
         return self.model.graph
 
     def export_ttl(self, outpath):
+        """Translate the facility and write the resulting graph as Turtle.
+
+        Parameters
+        ----------
+        outpath : str or os.PathLike
+            Path to write the serialized Turtle (`.ttl`) file to.
+        """
         graph = self.to_graph()
         with open(outpath, "w", encoding="utf-8") as file:
             file.write(graph.serialize(format="turtle"))

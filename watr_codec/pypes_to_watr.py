@@ -1,13 +1,17 @@
+import inspect
 import json
 import os
 import warnings
 
 import pint
+import plumb.brick as brick
+import plumb.watr as watr
+from plumb import Model, connect
+from plumb.qudt import quantity_kinds, units
+from plumb.watr import enums
 from pype_schema import connection, utils
 from pype_schema.node import Network, Node
 from pype_schema.tag import CONTENTLESS_TYPES, Tag, TagType, VirtualTag
-
-from watr_codec.semantic_backend import SemanticModel, SemanticTerm
 
 
 # add this file path to dir so that data folder is always accessible
@@ -23,51 +27,28 @@ ATTRIBUTES_KEY = "attributes"
 CONTENTS_TYPES_KEY = "contents_types"
 UNITS_KEY = "units"
 PROCESS_KEY = "process"
+DIGESTER_TYPES_KEY = "digester_types"
+CONVERT_TO_KEY = "convert_to"
+BY_DIMENSIONALITY_KEY = "by_dimensionality"
 NAME_KEY = "name"
 URI_KEY = "uri"
 KIND_KEY = "kind"
 ROLE_KEY = "role"
-ROLE_URI_KEY = "role-uri"
 SUBSTANCE_KEY = "substance"
-SUBSTANCE_URI_KEY = "substance-uri"
 
 # allowed values of the mapping file's `kind` key
 QUANT_KIND_STR = "QuantityKind"
 ENUM_KIND_STR = "EnumerationKind"
 
-# namespace prefixes (see `uri_mapping.json`)
-S223_URI = "s223"
-WATR_URI = "watr"
-QUDT_URI = "qudt"
-OWL_URI = "owl"
+# namespace prefixes used in the mapping file's `uri` keys
+REC_URI = "rec"
 
-# RDF classes
-QUANT_PROP_CLASS = "QuantifiableProperty"
-ENUM_PROP_CLASS = "EnumerableProperty"
-QUANT_OBS_PROP_CLASS = "QuantifiableObservableProperty"
-ENUM_OBS_PROP_CLASS = "EnumeratedObservableProperty"
-OUTLET_CONN_POINT_CLASS = "OutletConnectionPoint"
-INLET_CONN_POINT_CLASS = "InletConnectionPoint"
-ONTOLOGY_CLASS = "Ontology"
+# PyPES attributes with custom translation logic
+DIGESTER_TYPE_ATTR = "digester_type"
 
-# RDF predicates
-HAS_VALUE_PRED = "hasValue"
-HAS_UNIT_PRED = "hasUnit"
-HAS_QUANT_KIND_PRED = "hasQuantityKind"
-HAS_ENUM_KIND_PRED = "hasEnumerationKind"
-HAS_MEDIUM_PRED = "hasMedium"
-OF_MEDIUM_PRED = "ofMedium"
-HAS_ROLE_PRED = "hasRole"
-OF_SUBSTANCE_PRED = "ofSubstance"
-HAS_PROPERTY_PRED = "hasProperty"
-HAS_PROCESS_PRED = "hasProcess"
-HAS_CONN_POINT_PRED = "hasConnectionPoint"
-IS_CONN_POINT_OF_PRED = "isConnectionPointOf"
-CONNECTS_THROUGH_PRED = "connectsThrough"
-CNX_PRED = "cnx"
-
-# connection points are named `{node_id}-cp-{n}`
-CONN_POINT_STR = "-cp-"
+# connection points are named after the connection that uses them
+OUTLET_SUFFIX = "-out"
+INLET_SUFFIX = "-in"
 
 # These attributes are handled by custom logic and not automatically
 CUSTOM_HANDLED_ATTRIBUTES = [
@@ -93,7 +74,6 @@ NOT_YET_IMPLEMENTED_ATTRIBUTES = [
     "bidirectional",
     "pump_type",
     "pump_curve",
-    "digester_type",
     "area",
     "selectivity",
     "settling_time",
@@ -112,15 +92,26 @@ class NotImplementedWarning(UserWarning):
     pass
 
 
+class UnitConversionWarning(UserWarning):
+    """Warning category raised when a PyPES unit has no QUDT equivalent.
+
+    The mapping file names a unit that does have one (`convert_to`), and
+    attribute values are converted to it before being added to the graph.
+    """
+
+    pass
+
+
 class PyPES2WaTr:
     """Translates a pype_schema PyPES network into a WaTr semantic graph.
 
     An instance walks a `pype_schema.node.Network` (and any nodes,
-    connections, and tags nested inside it), converts each piece into the
-    corresponding WaTr/S223/QUDT terms using the mapping data in
-    `pypes_watr_mapping.json`, and accumulates the resulting triples in an
-    internal `SemanticModel`. The translation only happens once; the first
-    call to `to_graph` (or `export_ttl`) performs it and caches the result.
+    connections, and tags nested inside it) and builds the corresponding
+    WaTr/223P model with plumb, using the mapping data in
+    `pypes_watr_mapping.json`. plumb works out connection points, pipes, and
+    sensors, and can validate the result against the WaTr and 223P SHACL
+    shapes. The translation only happens once; the first call to `to_graph`
+    (or `export_ttl` or `validate`) performs it and caches the result.
     """
 
     def __init__(
@@ -128,7 +119,7 @@ class PyPES2WaTr:
         network: Network,
         local_prefix: str,
         mapping_path=WATR_CODEC_DIR + "/data/pypes_watr_mapping.json",
-        uri_mapping_path=WATR_CODEC_DIR + "/data/uri_mapping.json",
+        namespace: str = "urn:ex/",
     ):
         """Create a translator bound to a PyPES network and mapping data.
 
@@ -137,29 +128,27 @@ class PyPES2WaTr:
         network : pype_schema.node.Network
             The (possibly nested) PyPES facility/network to translate.
         local_prefix : str
-            RDF namespace prefix used for terms minted for this facility
-            (e.g. node, connection, and property IRIs).
+            RDF namespace prefix bound to `namespace` when the graph is
+            serialized.
         mapping_path : str, optional
             Path to the PyPES-to-WaTr JSON mapping file. Defaults to
             `data/pypes_watr_mapping.json` bundled with this package.
-        uri_mapping_path : str, optional
-            Path to the JSON file mapping URI prefixes to namespace IRIs.
-            Defaults to `data/uri_mapping.json` bundled with this package.
+        namespace : str, optional
+            IRI prefix that terms minted for this facility (nodes,
+            connections, properties, sensors) are created under. Defaults to
+            `"urn:ex/"`.
         """
         self.world = network
         self.local_prefix = local_prefix
         with open(mapping_path, "r", encoding="utf-8") as file:
             self.mapping = json.load(file)
-        with open(uri_mapping_path, "r", encoding="utf-8") as file:
-            self.uri_mapping = json.load(file)
 
-        self.model = SemanticModel(local_prefix, self.uri_mapping)
-        self.property_dict = {}
-        self.node_to_conn_ids = {}
-        self.node_dict = {}
-        self.conn_dict = {}
-        self.conn_point_dict = {}
-        self._translated = False
+        self.model = Model(namespace, prefixes={local_prefix: namespace})
+        self.entities = {}  # PyPES node ID -> plumb equipment or rec space
+        self.connections = {}  # PyPES connection ID -> plumb connection handle
+        self.properties = {}  # property ID -> plumb property
+        self.sensors = {}  # tag ID -> plumb sensor
+        self._graph = None
 
     def _sanitize_id(self, value: str) -> str:
         """Turn a PyPES ID into a string that is safe to use as an IRI suffix.
@@ -176,105 +165,115 @@ class PyPES2WaTr:
         """
         return value.replace(" ", "-")
 
-    def _local(self, name: str = "") -> SemanticTerm:
-        """Build a term in this facility's local namespace.
+    def _python_name(self, name: str) -> str:
+        """Turn an ontology local name into the attribute name plumb uses.
 
         Parameters
         ----------
-        name : str, optional
-            Local name to append to the local namespace. Defaults to the
-            empty string, which yields the namespace's root term (used to
-            represent the ontology itself).
-
-        Returns
-        -------
-        SemanticTerm
-            Term for `name` in the local namespace.
-        """
-        return self.model.local(name)
-
-    def _term(self, data: dict) -> SemanticTerm:
-        """Build a term from a mapping-file entry's URI prefix and name.
-
-        Parameters
-        ----------
-        data : dict
-            A mapping-file entry containing at least `"uri"` and `"name"`
-            keys (e.g. an entry from `nodes`, `contents_types`,
-            `attributes`, or `tag_types` in `pypes_watr_mapping.json`).
-
-        Returns
-        -------
-        SemanticTerm
-            Term identified by `data["uri"]:data["name"]`.
-        """
-        return self.model.term(data[URI_KEY], data[NAME_KEY])
-
-    def _predicate(self, prefix: str, name: str) -> SemanticTerm:
-        """Build a predicate term from a namespace prefix and local name.
-
-        Parameters
-        ----------
-        prefix : str
-            Namespace prefix (e.g. `"s223"`, `"qudt"`, `"watr"`).
         name : str
-            Local name of the predicate within that namespace.
-
-        Returns
-        -------
-        SemanticTerm
-            Term identified by `prefix:name`.
-        """
-        return self.model.predicate(prefix, name)
-
-    def _add_relation(
-        self, subject: SemanticTerm, prefix: str, name: str, obj: SemanticTerm
-    ):
-        """Add a single (subject, predicate, object) triple to the graph.
-
-        Parameters
-        ----------
-        subject : SemanticTerm
-            Subject of the triple.
-        prefix : str
-            Namespace prefix of the predicate.
-        name : str
-            Local name of the predicate within `prefix`.
-        obj : SemanticTerm
-            Object of the triple.
-        """
-        self.model.add(subject, self._predicate(prefix, name), obj)
-
-    def get_uri_prefix(self, uri: str):
-        """Look up the namespace IRI registered for a URI prefix.
-
-        Parameters
-        ----------
-        uri : str
-            Short URI prefix, e.g. `"s223"` or `"watr"`.
+            Local name from the mapping file, e.g. `"Water-Brine"` or
+            `"GAL_US-PER-MIN"`.
 
         Returns
         -------
         str
-            The full namespace IRI associated with `uri` in
-            `uri_mapping.json`.
+            `name` with dashes replaced by underscores, e.g. `"Water_Brine"`.
         """
-        return self.uri_mapping[uri]
+        return name.replace("-", "_")
+
+    def _class(self, data: dict):
+        """Look up the plumb class for a mapping-file `nodes`/`connections` entry.
+
+        Parameters
+        ----------
+        data : dict
+            Mapping-file entry with `"uri"` and `"name"` keys.
+
+        Returns
+        -------
+        type
+            The plumb class: RealEstateCore classes (`rec`) come from
+            `plumb.brick`, and WaTr and 223P classes from `plumb.watr`, which
+            carries its own copies of the 223P classes.
+
+        Raises
+        ------
+        KeyError
+            If plumb has no class of that name.
+        """
+        package = brick if data[URI_KEY] == REC_URI else watr
+        try:
+            return getattr(package, self._python_name(data[NAME_KEY]))
+        except AttributeError:
+            raise KeyError(f"plumb has no class for {data[URI_KEY]}:{data[NAME_KEY]}") from None
+
+    def _enum(self, data: dict):
+        """Look up the plumb enumeration value for a mapping-file entry.
+
+        Parameters
+        ----------
+        data : dict
+            Mapping-file entry whose `"name"` is a WaTr or 223P enumeration
+            value, e.g. a medium (`"Water-Brine"`) or role (`"Role-Permeate"`).
+
+        Returns
+        -------
+        plumb enumeration value
+            The corresponding member of `plumb.watr.enums.values`.
+        """
+        return getattr(enums.values, self._python_name(data[NAME_KEY]))
+
+    def _quantity_kind(self, data: dict):
+        """Look up the plumb QUDT quantity kind for a mapping-file entry.
+
+        Parameters
+        ----------
+        data : dict
+            Mapping-file entry whose `"name"` is a QUDT quantity kind.
+
+        Returns
+        -------
+        plumb quantity kind
+            The corresponding member of `plumb.qudt.quantity_kinds`.
+        """
+        return getattr(quantity_kinds, data[NAME_KEY])
+
+    def _unit(self, unit_dict: dict):
+        """Look up the plumb QUDT unit for a mapping-file `units` entry.
+
+        Parameters
+        ----------
+        unit_dict : dict
+            Mapping-file `units` entry, as returned by `convert_units`.
+
+        Returns
+        -------
+        plumb unit or None
+            The corresponding member of `plumb.qudt.units`, or None if the
+            entry has no QUDT unit (unitless values, or units that need
+            converting first).
+        """
+        name = unit_dict.get(NAME_KEY)
+        return getattr(units, self._python_name(name)) if name else None
 
     def convert_units(self, units: pint.Unit):
         """Look up the WaTr/QUDT unit entry for a Pint unit.
 
         Parameters
         ----------
-        units : pint.Unit
+        units : pint.Unit or None
             Unit to translate, as used by pype_schema attributes and tags.
 
         Returns
         -------
         dict
-            The mapping-file entry for `units` (may be an empty dict if the
-            unit is listed but intentionally left unmapped).
+            The mapping-file entry for `units`. Units with no QUDT equivalent
+            (e.g. MGD) return only a `convert_to` key naming a Pint unit that
+            does have one. Unitless values (`units` is None, e.g. RunStatus
+            tags) return an empty dict.
         """
+        if units is None:  # unitless (e.g., RunStatus tags) so nothing to look up
+            return {}
         return self.mapping[TOP_LEVEL_KEY][UNITS_KEY][str(units)]
 
     def convert_contents(self, contents: utils.ContentsType):
@@ -321,13 +320,18 @@ class PyPES2WaTr:
             raise ValueError(f"Unknown kind {prop_dict[KIND_KEY]!r} for attribute {attr_name}")
         return prop_dict, prop_dict[KIND_KEY] == QUANT_KIND_STR
 
-    def convert_tag_type(self, tag_type: TagType):
+    def convert_tag_type(self, tag_type: TagType, units: pint.Unit = None):
         """Look up the WaTr property entry for a PyPES tag type.
 
         Parameters
         ----------
         tag_type : pype_schema.tag.TagType
             Type of the SCADA tag being translated (e.g. `TagType.Flow`).
+        units : pint.Unit, optional
+            The tag's units. Some tag types mean different quantities
+            depending on their units (e.g. `Speed` in RPM is a rotational
+            speed, but in m/s a velocity), and their mapping entry lists those
+            under `by_dimensionality`.
 
         Returns
         -------
@@ -345,131 +349,50 @@ class PyPES2WaTr:
             `"EnumerationKind"`.
         """
         prop_dict = self.mapping[TOP_LEVEL_KEY][TAG_TYPES_KEY][tag_type.name]
+        if units is not None:
+            # the quantity a tag type describes can depend on its units' dimensions
+            prop_dict = prop_dict.get(BY_DIMENSIONALITY_KEY, {}).get(str(units.dimensionality), prop_dict)
         if prop_dict[KIND_KEY] not in (QUANT_KIND_STR, ENUM_KIND_STR):
             raise ValueError(f"Unknown kind {prop_dict[KIND_KEY]!r} for tag type {tag_type.name}")
         return prop_dict, prop_dict[KIND_KEY] == QUANT_KIND_STR
 
-    def generate_conn_point_name(self, name: str):
-        """Disambiguate a connection-point name against already-used names.
-
-        A node that participates in more than one connection will request
-        the same base name (e.g. `"ERI-cp-1"`) more than once - once per
-        connection it is a source or destination of. When that happens this
-        method increments the numeric suffix (`-cp-2`, `-cp-3`, ...) so
-        every connection point still gets a unique name; it does not change
-        how many connection points get created; every connection still
-        contributes exactly two.
+    def _endpoint(self, node: Node, child: Node, conn_id: str, end: str):
+        """Find the plumb equipment a connection actually attaches to.
 
         Parameters
         ----------
-        name : str
-            Proposed connection-point name, typically `"{node_id}-cp-1"`.
+        node : pype_schema.node.Node
+            The connection's source or destination.
+        child : pype_schema.node.Node or None
+            The connection's `exit_point` or `entry_point`: the child node
+            it leaves or enters when `node` is a network.
+        conn_id : str
+            ID of the connection, for error messages.
+        end : str
+            `"exit_point"` or `"entry_point"`, for error messages.
 
         Returns
         -------
-        str
-            `name` unchanged if it is not already taken, otherwise `name`
-            with its numeric suffix incremented until it is unique.
+        plumb equipment
+            The translated entity for `child` if given, otherwise for `node`.
 
         Raises
         ------
         ValueError
-            If `name` is taken and does not end in a numeric suffix.
+            If `node` is a network and `child` is not given. Networks are
+            RealEstateCore spaces, which cannot have connection points.
         """
-        if name not in self.conn_point_dict:
-            return name
-
-        prefix, _, suffix = name.rpartition("-")
-        next_num = int(suffix) + 1
-        while f"{prefix}-{next_num}" in self.conn_point_dict:
-            next_num += 1
-        return f"{prefix}-{next_num}"
-
-    def _add_medium_and_role(
-        self, subject: SemanticTerm, medium_dict: dict, medium_predicate: str
-    ):
-        """Attach a medium relation (and role relation, if any) to a term.
-
-        Parameters
-        ----------
-        subject : SemanticTerm
-            Term the medium (and role) relation should be attached to.
-        medium_dict : dict
-            Mapping-file `contents_types` entry, as returned by
-            `convert_contents`. May optionally include `"role"` and
-            `"role-uri"` keys.
-        medium_predicate : str
-            Local name of the medium predicate to use (e.g. `"hasMedium"`
-            for nodes/connections, `"ofMedium"` for properties).
-        """
-        medium = self._term(medium_dict)
-        self._add_relation(subject, S223_URI, medium_predicate, medium)
-
-        role = medium_dict.get(ROLE_KEY)
-        if role:
-            self._add_relation(
-                subject,
-                S223_URI,
-                HAS_ROLE_PRED,
-                self.model.term(medium_dict[ROLE_URI_KEY], role),
+        if child is not None:
+            return self.entities[child.id]
+        elif isinstance(node, Network):
+            raise ValueError(
+                f"Connection {conn_id} attaches to network {node.id} without an {end}; "
+                "networks are rec spaces and cannot be connected directly"
             )
+        else:
+            return self.entities[node.id]
 
-    def create_conn_points(self, conn: connection.Connection):
-        """Create the inlet/outlet connection points for a PyPES connection.
-
-        Parameters
-        ----------
-        conn : pype_schema.connection.Connection
-            Connection whose source and destination connection points
-            should be created.
-
-        Returns
-        -------
-        source_name : str
-            Name of the outlet connection point created on `conn.source`.
-        dest_name : str
-            Name of the inlet connection point created on `conn.destination`.
-        """
-        source_name = self.generate_conn_point_name(f"{conn.source.id}{CONN_POINT_STR}1")
-        dest_name = self.generate_conn_point_name(f"{conn.destination.id}{CONN_POINT_STR}1")
-        source = self._local(source_name)
-        dest = self._local(dest_name)
-        conn_term = self._local(self._sanitize_id(conn.id))
-        medium_dict = self.convert_contents(conn.contents)
-
-        self.model.add_type(source, self.model.term(S223_URI, OUTLET_CONN_POINT_CLASS))
-        self.model.add_type(dest, self.model.term(S223_URI, INLET_CONN_POINT_CLASS))
-        self._add_relation(
-            source,
-            S223_URI,
-            IS_CONN_POINT_OF_PRED,
-            self._local(self._sanitize_id(conn.source.id)),
-        )
-        self._add_relation(
-            dest,
-            S223_URI,
-            IS_CONN_POINT_OF_PRED,
-            self._local(self._sanitize_id(conn.destination.id)),
-        )
-        self._add_relation(source, S223_URI, CONNECTS_THROUGH_PRED, conn_term)
-        self._add_relation(dest, S223_URI, CONNECTS_THROUGH_PRED, conn_term)
-        self._add_medium_and_role(source, medium_dict, HAS_MEDIUM_PRED)
-        self._add_medium_and_role(dest, medium_dict, HAS_MEDIUM_PRED)
-
-        # NOTE: ignoring connectsAt and connectsThrough as those can be inferred
-        self.conn_point_dict[source_name] = {
-            "node": conn.source.id,
-            "connection": conn.id,
-            "term": source,
-        }
-        self.conn_point_dict[dest_name] = {
-            "node": conn.destination.id,
-            "connection": conn.id,
-            "term": dest,
-        }
-        return source_name, dest_name
-
-    def translate_attribute(self, attr_name, value, parent_id, contents=None):
+    def translate_attribute(self, attr_name, value, parent_id, host):
         """Convert a single PyPES node/connection attribute to a WaTr property.
 
         Parameters
@@ -479,21 +402,28 @@ class PyPES2WaTr:
         value : pint.Quantity, float, str, or None
             Value of the attribute. If it has `.units`/`.magnitude`
             attributes (i.e. it is a Pint quantity), the units are looked up
-            via `convert_units` and the magnitude is used as the value. If
+            via `convert_units` and the magnitude is used as the value. A
+            plain number is only valid for dimensionless quantity kinds (e.g.
+            a friction coefficient), and gets QUDT's `unit:UNITLESS`. If
             None, no property is created.
         parent_id : str
             ID of the PyPES node or connection this attribute belongs to.
-        contents : pype_schema.utils.ContentsType, optional
-            Contents to associate with this property, when they can be
-            determined for the parent (e.g. a connection's `contents`).
-            Default is None, for cases where contents cannot be
-            automatically determined (e.g. plain node attributes).
+        host : plumb equipment or connection handle
+            The translated node or connection the property is attached to.
+            The property takes the host's medium.
 
         Returns
         -------
-        dict or None
-            The entry recorded in `self.property_dict` for this attribute,
+        plumb property or None
+            The property recorded in `self.properties` for this attribute,
             or None if `value` is None.
+
+        Raises
+        ------
+        ValueError
+            If the attribute's quantity kind has dimensions but its value
+            has no units, or units of the wrong dimensions. 223P requires
+            a unit for every quantifiable property with a value.
         """
         # there is no reason to add a property without data to the graph
         if value is None:
@@ -503,96 +433,63 @@ class PyPES2WaTr:
         # TODO: handle dictionary attributes
         try:  # if Pint object, there will be units and magnitude fields
             unit_dict = self.convert_units(value.units)
-            converted_units = unit_dict.get(NAME_KEY)
-            unit_uri = unit_dict.get(URI_KEY)
+            if CONVERT_TO_KEY in unit_dict:  # no QUDT unit, so convert to one that has
+                warnings.warn(
+                    f"{value.units} has no QUDT unit, so {prop_id} was converted to {unit_dict[CONVERT_TO_KEY]}",
+                    UnitConversionWarning,
+                )
+                value = value.to(unit_dict[CONVERT_TO_KEY])
+                unit_dict = self.convert_units(value.units)
             value = value.magnitude
         except AttributeError:  # if no `units` attribute, assume value is directly stored
-            unit_dict, converted_units, unit_uri = {}, None, None
+            unit_dict = {}
 
         prop_data, is_quant_kind = self.convert_attribute(attr_name)
-        prop_type = QUANT_PROP_CLASS if is_quant_kind else ENUM_PROP_CLASS
-        prop_term = self._local(prop_id)
-
-        self.model.add_type(prop_term, self.model.term(S223_URI, prop_type))
-        self.model.add(
-            prop_term,
-            self._predicate(S223_URI, HAS_VALUE_PRED),
-            self.model.literal(value),
-        )
-
-        # contents may be impossible to automatically discern for nodes, hence this check
-        if contents is not None:
-            # TODO: should Role be applied elsewhere or does it make sense in the property itself?
-            medium_dict = self.convert_contents(contents)
-            medium_name = medium_dict[NAME_KEY]
-            medium_uri = medium_dict[URI_KEY]
-            self._add_medium_and_role(prop_term, medium_dict, OF_MEDIUM_PRED)
-            role_name = medium_dict.get(ROLE_KEY)
-            role_uri = medium_dict.get(ROLE_URI_KEY) if role_name is not None else None
-        else:
-            medium_name, medium_uri, role_name, role_uri = None, None, None, None
+        substance = {}
+        if prop_data.get(SUBSTANCE_KEY):
+            substance["of_substance"] = getattr(enums.values, self._python_name(prop_data[SUBSTANCE_KEY]))
 
         if is_quant_kind:
-            self._add_relation(
-                prop_term, QUDT_URI, HAS_QUANT_KIND_PRED, self._term(prop_data)
-            )
+            kind = self._quantity_kind(prop_data)
+            # 223P requires a quantifiable property's value to have a unit; a plain
+            # number is only complete for dimensionless quantities (e.g. friction)
+            unit = self._unit(unit_dict) or units.UNITLESS
+            try:  # plumb also checks the unit has the quantity kind's dimensions
+                prop = host.quantity(prop_id, value, unit=unit, kind=kind, **substance)
+            except ValueError:
+                raise ValueError(
+                    f"{prop_id} is a {prop_data[NAME_KEY]}, which needs a unit, but its value {value!r} has "
+                    f"{'no units' if unit is units.UNITLESS else 'units of the wrong dimensions'}"
+                ) from None
         else:
-            self._add_relation(
-                prop_term, S223_URI, HAS_ENUM_KIND_PRED, self._term(prop_data)
+            prop = watr.EnumerableProperty(
+                prop_id,
+                has_value=value,
+                has_enumeration_kind=self._enum(prop_data),
+                model=self.model,
+                **substance,
             )
+            host.has_property.add(prop)
 
-        substance_name = prop_data.get(SUBSTANCE_KEY)
-        substance_uri = prop_data.get(SUBSTANCE_URI_KEY)
-        if substance_name:
-            self._add_relation(
-                prop_term,
-                S223_URI,
-                OF_SUBSTANCE_PRED,
-                self.model.term(substance_uri or S223_URI, substance_name),
-            )
-
-        if converted_units:
-            self._add_relation(
-                prop_term,
-                S223_URI,
-                HAS_UNIT_PRED,
-                self.model.term(unit_uri, converted_units),
-            )
-
-        self.property_dict[prop_id] = {
-            "property": prop_data[NAME_KEY],
-            "prop_type": prop_type,
-            "prop_uri": prop_data[URI_KEY],
-            "parent_id": self._sanitize_id(parent_id),
-            "medium": medium_name,
-            "medium_uri": medium_uri,
-            "role": role_name,
-            "role_uri": role_uri,
-            "substance": substance_name,
-            "substance_uri": substance_uri,
-            "source_unit_id": None,  # TODO: use this downstream
-            "dest_unit_id": None,  # TODO: use this downstream
-            "is_quant_kind": is_quant_kind,
-            UNITS_KEY: unit_dict,
-            "term": prop_term,
-        }
-        return self.property_dict[prop_id]
+        self.properties[prop_id] = prop
+        return prop
 
     def translate_tag(self, tag: Tag):
-        """Convert a PyPES SCADA tag to a WaTr observable property.
+        """Convert a PyPES SCADA tag to a WaTr sensor and its observed property.
 
         Parameters
         ----------
         tag : pype_schema.tag.Tag
-            Tag to translate. `tag.units`, `tag.tag_type`, and
-            `tag.contents` drive the WaTr quantity kind / enumeration kind,
-            unit, and medium relations; `tag.source_unit_id` and
-            `tag.dest_unit_id` are recorded but not yet used downstream.
+            Tag to translate. The sensor is named after the tag and observes
+            a property named `"<tag id>-value"`, located on the tag's parent
+            node or connection. `tag.units`, `tag.tag_type`, and
+            `tag.contents` drive the property's quantity kind or enumeration
+            kind, unit, substance, and medium.
 
         Returns
         -------
-        dict
-            The entry recorded in `self.property_dict` for this tag.
+        plumb sensor
+            The sensor recorded in `self.sensors` for this tag.
 
         Raises
         ------
@@ -616,6 +513,7 @@ class PyPES2WaTr:
         # - calibration : Logbook
         # NOTE: totalized, manufacturer, measure_freq, report_freq, downsample_method,
         # and calibration are all ignored
+        # TODO: add handling of source and destination unit IDs
 
         # PyPES only allows the tag types in `CONTENTLESS_TYPES` to have no contents
         if tag.contents is None and tag.tag_type not in CONTENTLESS_TYPES:
@@ -624,200 +522,78 @@ class PyPES2WaTr:
             )
 
         tag_id = self._sanitize_id(tag.id)
-        parent_id = self._sanitize_id(tag.parent_id)
-        if tag.units is None:  # unitless tags (e.g., RunStatus) have no units to convert
-            unit_dict, converted_units, unit_uri = {}, None, None
-        else:
-            unit_dict = self.convert_units(tag.units)
-            converted_units = unit_dict.get(NAME_KEY)
-            unit_uri = unit_dict.get(URI_KEY)
+        host = self.connections.get(tag.parent_id) or self.entities[tag.parent_id]
+        unit_dict = self.convert_units(tag.units)
+        if CONVERT_TO_KEY in unit_dict:
+            # the tag's data lives outside the codec, so it can't be converted here
+            warnings.warn(
+                f"{tag.units} has no QUDT unit, so tag {tag_id} was given no unit "
+                f"(its data would need converting to {unit_dict[CONVERT_TO_KEY]})",
+                UnitConversionWarning,
+            )
+        unit = self._unit(unit_dict)
 
-        prop_data, is_quant_kind = self.convert_tag_type(tag.tag_type)
-        prop_type = QUANT_OBS_PROP_CLASS if is_quant_kind else ENUM_OBS_PROP_CLASS
-        tag_term = self._local(tag_id)
-
-        self.model.add_type(tag_term, self.model.term(S223_URI, prop_type))
+        prop_data, is_quant_kind = self.convert_tag_type(tag.tag_type, tag.units)
+        kind = self._quantity_kind(prop_data) if is_quant_kind else self._enum(prop_data)
+        observed = {}
         if tag.contents:
             # TODO: should Role be applied elsewhere or does it make sense in the property itself?
-            medium_dict = self.convert_contents(tag.contents)
-            medium_name = medium_dict[NAME_KEY]
-            medium_uri = medium_dict[URI_KEY]
-            self._add_medium_and_role(tag_term, medium_dict, OF_MEDIUM_PRED)
-            role_name = medium_dict.get(ROLE_KEY)
-            role_uri = medium_dict.get(ROLE_URI_KEY) if role_name is not None else None
+            observed["of_medium"] = self._enum(self.convert_contents(tag.contents))
+        if prop_data.get(SUBSTANCE_KEY):
+            observed["of_substance"] = getattr(enums.values, self._python_name(prop_data[SUBSTANCE_KEY]))
+
+        if unit is not None:
+            sensor = host.sensor(tag_id, kind=kind, unit=unit, **observed)
+        elif not is_quant_kind:
+            sensor = host.sensor(tag_id, kind=kind, **observed)
         else:
-            medium_name, medium_uri, role_name, role_uri = None, None, None, None
-
-        if is_quant_kind:
-            self._add_relation(
-                tag_term, QUDT_URI, HAS_QUANT_KIND_PRED, self._term(prop_data)
+            # plumb's `sensor()` needs a unit for quantity kinds, so build it by hand
+            prop = watr.QuantifiableObservableProperty(
+                f"{tag_id}-value", has_quantity_kind=kind, model=self.model, **observed
             )
-        else:
-            self._add_relation(
-                tag_term, S223_URI, HAS_ENUM_KIND_PRED, self._term(prop_data)
-            )
+            host.has_property.add(prop)
+            sensor = watr.Sensor(tag_id, has_observation_location=host, observes=prop, model=self.model)
 
-        substance_name = prop_data.get(SUBSTANCE_KEY)
-        substance_uri = prop_data.get(SUBSTANCE_URI_KEY)
-        if substance_name:
-            self._add_relation(
-                tag_term,
-                S223_URI,
-                OF_SUBSTANCE_PRED,
-                self.model.term(substance_uri or S223_URI, substance_name),
-            )
-
-        if converted_units:
-            self._add_relation(
-                tag_term,
-                S223_URI,
-                HAS_UNIT_PRED,
-                self.model.term(unit_uri, converted_units),
-            )
-
-        self.property_dict[tag_id] = {
-            "property": prop_data[NAME_KEY],
-            "prop_type": prop_type,
-            "prop_uri": prop_data[URI_KEY],
-            "parent_id": parent_id,
-            "medium": medium_name,
-            "medium_uri": medium_uri,
-            "role": role_name,
-            "role_uri": role_uri,
-            "substance": substance_name,
-            "substance_uri": substance_uri,
-            "source_unit_id": tag.source_unit_id,  # TODO: use this downstream
-            "dest_unit_id": tag.dest_unit_id,  # TODO: use this downstream
-            "is_quant_kind": is_quant_kind,
-            UNITS_KEY: unit_dict,
-            "term": tag_term,
-        }
-        return self.property_dict[tag_id]
-
-    def _properties_for_parent(self, parent_id: str):
-        """Look up the property terms already translated for a given parent.
-
-        Parameters
-        ----------
-        parent_id : str
-            Raw (unsanitized) ID of the parent node or connection.
-
-        Returns
-        -------
-        list of SemanticTerm
-            Terms of every entry in `self.property_dict` whose `parent_id`
-            matches the sanitized form of `parent_id`.
-        """
-        parent_id = self._sanitize_id(parent_id)
-        return [
-            prop_attrs["term"]
-            for prop_attrs in self.property_dict.values()
-            if prop_attrs["parent_id"] == parent_id
-        ]
-
-    def _add_parent_properties(self, parent: SemanticTerm, parent_id: str):
-        """Link a node or connection term to all of its translated properties.
-
-        Parameters
-        ----------
-        parent : SemanticTerm
-            Term for the node or connection that owns the properties.
-        parent_id : str
-            Raw (unsanitized) ID of that node or connection, used to look up
-            its properties via `_properties_for_parent`.
-        """
-        for prop_term in self._properties_for_parent(parent_id):
-            self._add_relation(parent, S223_URI, HAS_PROPERTY_PRED, prop_term)
+        self.sensors[tag_id] = sensor
+        return sensor
 
     def translate_node(self, node: Node):
-        """Convert a PyPES node into its WaTr type, connections, and properties.
+        """Convert a PyPES node into WaTr equipment with its properties.
 
         Parameters
         ----------
         node : pype_schema.node.Node
             Node to translate. Its class name is used to look up the
-            corresponding WaTr type in the mapping file; its
-            `input_contents`/`output_contents` become `hasMedium`
-            relations; its connections (tracked via `node_to_conn_ids`)
-            become `hasConnectionPoint`/`cnx` relations; and any remaining
-            attributes are translated via `translate_attribute`.
+            corresponding plumb class in the mapping file; any process the
+            mapping declares is added unless the class already has it, a
+            digester's type becomes a role, and any remaining attributes are
+            translated via `translate_attribute`. Connection points are
+            created later, by `translate_connection`.
 
         Returns
         -------
-        dict
-            The entry recorded in `self.node_dict` for this node.
-
-        Raises
-        ------
-        ValueError
-            If a connection tracked against this node does not actually
-            list it as a source or destination.
+        plumb equipment
+            The entity recorded in `self.entities` for this node.
         """
         pypes_class = type(node).__name__
         node_data = self.mapping[TOP_LEVEL_KEY][NODES_KEY][pypes_class]
         node_id = self._sanitize_id(node.id)
-        node_term = self._local(node_id)
+        node_class = self._class(node_data)
+        kwargs = {}
+        medium_param = inspect.signature(node_class).parameters.get("medium")
+        if medium_param is not None and medium_param.default is inspect.Parameter.empty:
+            # some classes (e.g. Junction) need their medium when they are created
+            media = {self.convert_contents(c)[NAME_KEY]: c for c in node.input_contents + node.output_contents}
+            if len(media) != 1:
+                raise ValueError(f"{pypes_class} {node.id} needs exactly one medium, but has {sorted(media)}")
+            kwargs["medium"] = self._enum(self.convert_contents(next(iter(media.values()))))
+        with self.model:
+            entity = node_class(node_id, **kwargs)
 
-        self.model.add_type(node_term, self._term(node_data))
         if node_data.get(PROCESS_KEY):
-            self._add_relation(
-                node_term,
-                WATR_URI,
-                HAS_PROCESS_PRED,
-                self.model.term(WATR_URI, node_data[PROCESS_KEY]),
-            )
-
-        # TODO: add handling of source and destination unit IDs to below logic
-        conn_point_list = []
-        conn_from_list = []
-        conn_to_list = []
-        conn_point_in = None
-        conn_point_out = None
-
-        for conn_id in self.node_to_conn_ids.get(node.id, []):
-            conn_data = self.conn_dict[conn_id]
-            # TODO: double check below logic
-            if conn_data["destination"] == node.id:
-                conn_point_list.append(conn_data["dest_conn_point"])
-                conn_from_list.append(conn_data["source"])
-                conn_point_in = conn_data["dest_conn_point"]
-                # node_str += f"    {S223_URI}:connectedFrom {self.local_prefix}:{self.conn_dict[conn_id]["source"]} ;\n"
-            elif conn_data["source"] == node.id:
-                conn_point_list.append(conn_data["source_conn_point"])
-                conn_to_list.append(conn_data["destination"])
-                conn_point_out = conn_data["source_conn_point"]
-                # node_str += f"    {S223_URI}:connectedTo {self.local_prefix}:{self.conn_dict[conn_id]["destination"]} ;\n"
-            else:
-                raise ValueError(
-                    "Connection `source` or `destination` must match node `id`"
-                )
-
-            # TODO: how to handle if there are three connection points?
-            # TODO: is this `cnx` necessary? I saw it from the examples, but am not sure
-            if conn_point_in and conn_point_out:
-                self._add_relation(
-                    node_term, S223_URI, CNX_PRED, self._local(conn_point_in)
-                )
-                self._add_relation(
-                    node_term, S223_URI, CNX_PRED, self._local(conn_point_out)
-                )
-                conn_point_in = None
-                conn_point_out = None
-
-        for conn_point in conn_point_list:
-            self._add_relation(
-                node_term, S223_URI, HAS_CONN_POINT_PRED, self._local(conn_point)
-            )
-
-        media_added = set()
-        for contents in node.input_contents + node.output_contents:
-            medium_dict = self.convert_contents(contents)
-            medium_name = medium_dict[NAME_KEY]
-            if medium_name not in media_added:
-                self._add_relation(
-                    node_term, S223_URI, HAS_MEDIUM_PRED, self._term(medium_dict)
-                )
-                media_added.add(medium_name)
+            process = getattr(watr, self._python_name(node_data[PROCESS_KEY]))
+            if process not in entity.has_process:
+                entity.has_process.add(process)
 
         for prop_name, prop_val in node.__dict__.items():  # get all attributes
             if prop_name in CUSTOM_HANDLED_ATTRIBUTES or prop_name.startswith("_"):
@@ -829,59 +605,56 @@ class PyPES2WaTr:
                     f"The attribute {prop_name} for node {node_id} is not yet implemented in the WaTr codec!",
                     NotImplementedWarning,
                 )
+            elif prop_name == DIGESTER_TYPE_ATTR:
+                # digester types (aerobic, anaerobic) are WaTr roles of the digester
+                role_dict = self.mapping[TOP_LEVEL_KEY][DIGESTER_TYPES_KEY][prop_val.name]
+                entity.has_role.add(self._enum(role_dict))
             else:
-                # create property and add to property_dict
-                # TODO: try to automatically determine contents
-                self.translate_attribute(prop_name, prop_val, node_id, contents=None)
+                # create property and attach it to the node
+                self.translate_attribute(prop_name, prop_val, node_id, entity)
 
-        self._add_parent_properties(node_term, node_id)
-        # TODO: add more attributes to below dictionary
-        self.node_dict[node_id] = {
-            "node": node_data[NAME_KEY],
-            "conn_points": conn_point_list,
-            "connected_from": conn_from_list,
-            "connected_to": conn_to_list,
-            "term": node_term,
-        }
-        return self.node_dict[node_id]
+        self.entities[node.id] = entity
+        return entity
 
     def translate_connection(self, conn: connection.Connection):
-        """Convert a PyPES connection into its WaTr type, points, and properties.
+        """Convert a PyPES connection into a WaTr connection with its properties.
 
         Parameters
         ----------
         conn : pype_schema.connection.Connection
-            Connection to translate. Its class name is used to look up the
-            corresponding WaTr type in the mapping file; `create_conn_points`
-            builds its inlet/outlet connection points; and any remaining
+            Connection to translate. It gets an outlet point
+            (`"<conn id>-out"`) on the equipment it leaves and an inlet point
+            (`"<conn id>-in"`) on the equipment it enters, so plumb never has
+            to guess the direction. When an end is a network, the
+            connection's `exit_point`/`entry_point` child is used instead.
+            Its contents give its medium and role, and any remaining
             attributes are translated via `translate_attribute`.
 
         Returns
         -------
-        dict
-            The entry recorded in `self.conn_dict` for this connection.
+        plumb connection handle
+            The handle recorded in `self.connections` for this connection.
         """
         pypes_class = type(conn).__name__
         conn_id = self._sanitize_id(conn.id)
         conn_data = self.mapping[TOP_LEVEL_KEY][CONNECTIONS_KEY][pypes_class]
-        conn_term = self._local(conn_id)
 
-        # This dictionary enables us to add the correct connections to each node
-        self.node_to_conn_ids.setdefault(conn.source.id, []).append(conn.id)
-        self.node_to_conn_ids.setdefault(conn.destination.id, []).append(conn.id)
+        source = self._endpoint(conn.source, conn.exit_point, conn.id, "exit_point")
+        dest = self._endpoint(conn.destination, conn.entry_point, conn.id, "entry_point")
+        outlet = source.port(conn_id + OUTLET_SUFFIX, direction="out")
+        inlet = dest.port(conn_id + INLET_SUFFIX, direction="in")
 
-        self.model.add_type(conn_term, self._term(conn_data))
-        source_conn_point, dest_conn_point = self.create_conn_points(conn)
-        self._add_relation(conn_term, S223_URI, CNX_PRED, self._local(source_conn_point))
-        self._add_relation(conn_term, S223_URI, CNX_PRED, self._local(dest_conn_point))
-
-        # TODO: should Role be applied elsewhere or does it make sense in the connection?
         medium_dict = self.convert_contents(conn.contents)
-        medium_name = medium_dict[NAME_KEY]
-        medium_uri = medium_dict[URI_KEY]
-        self._add_medium_and_role(conn_term, medium_dict, HAS_MEDIUM_PRED)
-        role_name = medium_dict.get(ROLE_KEY)
-        role_uri = medium_dict.get(ROLE_URI_KEY) if role_name is not None else None
+        handle = connect(
+            outlet,
+            inlet,
+            name=conn_id,
+            medium=self._enum(medium_dict),
+            connection=self._class(conn_data),
+        )
+        if medium_dict.get(ROLE_KEY):
+            # TODO: should Role be applied elsewhere or does it make sense in the connection?
+            handle.has_role.add(getattr(enums.values, self._python_name(medium_dict[ROLE_KEY])))
 
         # TODO: add logic to handle source and destination unit IDs
         # TODO: add logic for bidirectional connections
@@ -897,56 +670,54 @@ class PyPES2WaTr:
                     NotImplementedWarning,
                 )
             else:
-                # create property and add to property_dict
-                self.translate_attribute(
-                    prop_name, prop_val, conn_id, contents=conn.contents
-                )
+                # create property and attach it to the connection
+                self.translate_attribute(prop_name, prop_val, conn_id, handle)
 
-        # TODO: check that hasProperty can have unlimited entries
-        self._add_parent_properties(conn_term, conn_id)
-        self.conn_dict[conn.id] = {
-            "connection": conn_data[NAME_KEY],
-            "source": conn.source.id,
-            "destination": conn.destination.id,
-            "source_conn_point": source_conn_point,
-            "dest_conn_point": dest_conn_point,
-            "medium": medium_name,
-            "medium_uri": medium_uri,
-            "role": role_name,
-            "role_uri": role_uri,
-            "term": conn_term,
-        }
-        return self.conn_dict[conn.id]
+        self.connections[conn.id] = handle
+        return handle
 
-    # TODO: add contains and isContained logic to network hierarchy
-    def translate_network(self, network: Network):
-        """Recursively translate every tag, connection, and node in a network.
+    def translate_network(self, network: Network, region=None):
+        """Recursively translate every node, connection, and tag in a network.
 
         Parameters
         ----------
         network : pype_schema.node.Network
-            Network to translate. Nested `Network` nodes are translated
-            recursively (and, since they are also nodes of their parent
-            network, are additionally translated as nodes in their own
-            right unless `network` is `self.world`).
+            Network to translate. Nested networks (including `Facility` and
+            `ModularUnit`) become RealEstateCore spaces (e.g. `rec:Region`)
+            that are the location of the nodes inside them.
+        region : plumb rec space, optional
+            The space translated for `network`, or None for `self.world`,
+            which is the model itself rather than a space.
         """
-        for tag in network.get_all_tags():
-            if isinstance(tag, VirtualTag):
-                pass  # TODO: implement VirtualTag to Acquirium soft sensor translator
+        for node in network.get_all_nodes(recurse=False):
+            if isinstance(node, Network):
+                node_data = self.mapping[TOP_LEVEL_KEY][NODES_KEY][type(node).__name__]
+                with self.model:
+                    child = self._class(node_data)(self._sanitize_id(node.id))
+                self.entities[node.id] = child
+                self.translate_network(node, region=child)
             else:
-                self.translate_tag(tag)
+                child = self.translate_node(node)
+            if region is not None:
+                if isinstance(child, brick.Space):
+                    region.has_part.add(child)
+                else:
+                    region.is_location_of.add(child)
 
-        for conn in network.get_all_connections():
+        for conn in network.get_all_connections(recurse=False):
             self.translate_connection(conn)
 
-        for node in network.get_all_nodes():
-            if isinstance(node, Network):
-                self.translate_network(node)
+        for tag in network.get_all_tags(recurse=False):
+            if isinstance(tag, VirtualTag):
+                pass  # TODO: implement VirtualTag to Acquirium soft sensor translator
+            elif isinstance(self.entities.get(tag.parent_id), brick.Space):
+                warnings.warn(
+                    f"Tag {tag.id} is on network {tag.parent_id}, and tags on rec spaces "
+                    "are not yet implemented in the WaTr codec!",
+                    NotImplementedWarning,
+                )
             else:
-                self.translate_node(node)
-
-        if self.world.id != network.id:
-            self.translate_node(network)
+                self.translate_tag(tag)
 
     def to_graph(self):
         """Translate the facility (if not already done) and return its graph.
@@ -954,15 +725,26 @@ class PyPES2WaTr:
         Returns
         -------
         rdflib.Graph
-            The accumulated semantic graph for `self.world`. Calling this
-            more than once is safe and returns the same graph without
-            re-running the translation.
+            The resolved semantic graph for `self.world`. Calling this more
+            than once is safe and returns the same graph without re-running
+            the translation.
         """
-        if not self._translated:
-            self.model.add_type(self._local(), self.model.term(OWL_URI, ONTOLOGY_CLASS))
+        if self._graph is None:
             self.translate_network(self.world)
-            self._translated = True
-        return self.model.graph
+            self._graph = self.model.graph()
+        return self._graph
+
+    def validate(self):
+        """Translate the facility (if not already done) and validate it.
+
+        Returns
+        -------
+        plumb ValidationReport
+            The SHACL validation report against the WaTr, 223P, and QUDT
+            shapes. It is truthy when the model conforms.
+        """
+        self.to_graph()
+        return self.model.validate()
 
     def export_ttl(self, outpath):
         """Translate the facility and write the resulting graph as Turtle.

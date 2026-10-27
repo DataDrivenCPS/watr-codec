@@ -12,7 +12,7 @@ import warnings
 
 import pytest
 from pype_schema.parse_json import JSONParser
-from rdflib import Graph
+from rdflib import Graph, Namespace
 from rdflib.namespace import RDF
 
 from watr_codec.pypes_to_watr import NotImplementedWarning, PyPES2WaTr
@@ -20,19 +20,29 @@ from watr_codec.pypes_to_watr import NotImplementedWarning, PyPES2WaTr
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 DESAL_JSON_PATH = os.path.join(CURRENT_DIR, "..", "watr_codec", "data", "desalination.json")
 
+LOCAL = Namespace("urn:ex/")
+S223 = Namespace("http://data.ashrae.org/standard223#")
+WATR = Namespace("https://watermetadata.org/ontology/watr#")
+QUDT = Namespace("http://qudt.org/schema/qudt/")
+QK = Namespace("http://qudt.org/vocab/quantitykind/")
+UNIT = Namespace("http://qudt.org/vocab/unit/")
+
 # Expected WaTr quantity kind + unit for every tag in desalination.json,
 # hand-verified against pypes_watr_mapping.json. These are independent of
 # PyPES2WaTr.convert_tag_type()/convert_units() (not derived by calling
 # them), so a bug in that conversion logic will actually cause a mismatch
 # here instead of the test just re-confirming its own inputs.
+# NOTE: the two pump-speed tags are typed Speed with Hz units in
+# desalination.json; Hz has the dimensions of a rotational speed, so they
+# translate as RotationalVelocity
 EXPECTED_TAG_TRANSLATIONS = {
-    "P_400_002A_P.RPM_MV": ("qudtqk", "Speed", "unit", "HZ"),
-    "PIT_400_003A_P.PV": ("qudtqk", "Pressure", "unit", "PSI"),
-    "P_400_001A_P.RPM_MV": ("qudtqk", "Speed", "unit", "HZ"),
-    "PDIT_400_002A_P.PV": ("qudtqk", "Pressure", "unit", "PSI"),
-    "FIT_400_001A_P.PV": ("qudtqk", "VolumeFlowRate", "unit", "GAL_US-PER-MIN"),
-    "AIT_400_001A_P.PV": ("qudtqk", "ElectricConductivity", "unit", "MicroS-PER-CentiM"),
-    "FIT_400_002A_P.PV": ("qudtqk", "VolumeFlowRate", "unit", "GAL_US-PER-MIN"),
+    "P_400_002A_P.RPM_MV": ("RotationalVelocity", "HZ"),
+    "PIT_400_003A_P.PV": ("Pressure", "PSI"),
+    "P_400_001A_P.RPM_MV": ("RotationalVelocity", "HZ"),
+    "PDIT_400_002A_P.PV": ("Pressure", "PSI"),
+    "FIT_400_001A_P.PV": ("VolumeFlowRate", "GAL_US-PER-MIN"),
+    "AIT_400_001A_P.PV": ("ElectricConductivity", "MicroS-PER-CentiM"),
+    "FIT_400_002A_P.PV": ("VolumeFlowRate", "GAL_US-PER-MIN"),
 }
 
 # NotImplementedWarning is expected for every one of these PyPES attributes
@@ -91,9 +101,6 @@ def test_desalination_facility_translates_into_a_consistent_graph(converter, des
 
     assert len(graph) > 0
 
-    local = converter.model.namespaces[converter.local_prefix]
-    s223 = converter.model.namespaces["s223"]
-
     # Expected IDs are derived straight from the parsed fixture rather than
     # hardcoded here, so this test keeps working if desalination.json's
     # topology changes without anyone needing to remember to update it.
@@ -101,29 +108,24 @@ def test_desalination_facility_translates_into_a_consistent_graph(converter, des
     expected_conn_ids = {converter._sanitize_id(conn_id) for conn_id in desal_network.connections}
 
     # Every node and connection in the source facility should be a typed
-    # subject in the graph itself (not just a key in the converter's
-    # internal node_dict/conn_dict bookkeeping).
+    # subject in the graph itself.
     for node_id in expected_node_ids:
-        assert any(graph.triples((local[node_id], RDF.type, None))), f"{node_id} missing from graph"
+        assert any(graph.triples((LOCAL[node_id], RDF.type, None))), f"{node_id} missing from graph"
     for conn_id in expected_conn_ids:
-        assert any(graph.triples((local[conn_id], RDF.type, None))), f"{conn_id} missing from graph"
+        assert any(graph.triples((LOCAL[conn_id], RDF.type, None))), f"{conn_id} missing from graph"
 
-    # Every connection creates exactly one outlet and one inlet connection
-    # point, i.e. exactly two connection points "connectThrough" it - even
-    # though some nodes (e.g. ERI, which sources/receives several pipes)
-    # cause generate_conn_point_name() to rename later points from
-    # "ERI-cp-1" to "ERI-cp-2", "ERI-cp-3", etc. to keep every name unique.
-    # That renaming changes point *names*, not the total point *count*.
-    connects_through = s223["connectsThrough"]
-    conn_points = {subject for subject, _, _ in graph.triples((None, connects_through, None))}
-    assert len(conn_points) == 2 * len(expected_conn_ids)
+    # Every connection joins exactly one outlet and one inlet connection
+    # point, named after the connection, even for nodes such as ERI that
+    # source or receive several pipes.
+    for conn_id in expected_conn_ids:
+        points = set(graph.subjects(S223["connectsThrough"], LOCAL[conn_id]))
+        assert points == {LOCAL[conn_id + "-out"], LOCAL[conn_id + "-in"]}, conn_id
 
     # Every subject that has properties attached must itself be a real,
-    # translated entity in the graph - i.e. no property's parent_id points
-    # at something that was never actually translated.
-    has_property = s223["hasProperty"]
-    parents_with_properties = {subject for subject, _, _ in graph.triples((None, has_property, None))}
-    typed_subjects = {subject for subject, _, _ in graph.triples((None, RDF.type, None))}
+    # translated entity in the graph - i.e. no property points at something
+    # that was never actually translated.
+    parents_with_properties = set(graph.subjects(S223["hasProperty"], None))
+    typed_subjects = set(graph.subjects(RDF.type, None))
     assert parents_with_properties <= typed_subjects
 
     # to_graph() should be idempotent: calling it again must not re-run the
@@ -131,6 +133,15 @@ def test_desalination_facility_translates_into_a_consistent_graph(converter, des
     graph_again = converter.to_graph()
     assert graph_again is graph
     assert len(graph_again) == len(graph)
+
+
+def test_desalination_facility_conforms_to_watr_and_223p(converter):
+    """The translated facility should pass SHACL validation against the
+    WaTr, 223P, and QUDT shapes."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        report = converter.validate()
+    assert report, str(report)
 
 
 def test_desalination_ttl_export_matches_expected_entities(converter, desal_network, tmp_path):
@@ -151,24 +162,22 @@ def test_desalination_ttl_export_matches_expected_entities(converter, desal_netw
 
     assert outpath.exists()
     reparsed = Graph().parse(str(outpath), format="turtle")
-    assert len(reparsed) == len(converter.model.graph)
+    assert len(reparsed) == len(converter.to_graph())
 
-    ns = converter.model.namespaces
-    local, s223, watr, qudt = ns["dsl"], ns["s223"], ns["watr"], ns["qudt"]
-
-    # Node types, including a node whose mapping entry declares a `process`.
-    assert (local["HPPump"], RDF.type, watr["Pump"]) in reparsed
-    assert (local["SWRO"], RDF.type, watr["ReverseOsmosisMembrane"]) in reparsed
-    assert (local["SWRO"], watr["hasProcess"], watr["Process-ReverseOsmosis"]) in reparsed
-    assert (local["Output"], RDF.type, watr["Tank"]) in reparsed
+    # Node types, including a node whose class carries a process.
+    assert (LOCAL["HPPump"], RDF.type, WATR["Pump"]) in reparsed
+    assert (LOCAL["SWRO"], RDF.type, WATR["ReverseOsmosisMembrane"]) in reparsed
+    assert (LOCAL["SWRO"], WATR["hasProcess"], WATR["Process-ReverseOsmosis"]) in reparsed
+    assert (LOCAL["Output"], RDF.type, WATR["Tank"]) in reparsed
 
     # Every pipe in the facility should show up as an s223:Pipe.
-    pipe_count = sum(1 for _ in reparsed.triples((None, RDF.type, s223["Pipe"])))
+    pipe_count = sum(1 for _ in reparsed.triples((None, RDF.type, S223["Pipe"])))
     assert pipe_count == len(desal_network.connections)
 
-    # Every tag in the facility - not just one - should carry its expected
-    # quantity kind and unit.
-    for tag_id, (qk_uri, qk_name, unit_uri, unit_name) in EXPECTED_TAG_TRANSLATIONS.items():
-        term = local[tag_id]
-        assert (term, qudt["hasQuantityKind"], ns[qk_uri][qk_name]) in reparsed, tag_id
-        assert (term, s223["hasUnit"], ns[unit_uri][unit_name]) in reparsed, tag_id
+    # Every tag in the facility - not just one - should be a sensor whose
+    # observed property carries its expected quantity kind and unit.
+    for tag_id, (kind, unit) in EXPECTED_TAG_TRANSLATIONS.items():
+        value = LOCAL[tag_id + "-value"]
+        assert (LOCAL[tag_id], S223["observes"], value) in reparsed, tag_id
+        assert (value, QUDT["hasQuantityKind"], QK[kind]) in reparsed, tag_id
+        assert (value, QUDT["hasUnit"], UNIT[unit]) in reparsed, tag_id

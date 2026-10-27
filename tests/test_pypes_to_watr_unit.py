@@ -1,26 +1,37 @@
 """Unit tests for watr_codec.pypes_to_watr.PyPES2WaTr.
 
 These tests exercise the individual translation helpers in isolation using
-small, hand-built pype_schema objects rather than a full facility, so that
-each piece of translation logic (unit conversion, medium/role handling,
-connection-point naming, attribute skipping, etc.) can be verified on its
-own. The two end-to-end tests that exercise the full desalination.json
-pipeline live in test_pypes_to_watr_e2e.py.
+small, real pype_schema objects rather than a full facility, so that each
+piece of translation logic (unit conversion, media and roles, sensors,
+networks, attribute skipping, etc.) can be verified on its own. The
+end-to-end tests that exercise the full desalination.json pipeline live in
+test_pypes_to_watr_e2e.py.
 """
 
 import warnings
 
 import pytest
-from rdflib import Graph
+from rdflib import Graph, Namespace
 from rdflib.namespace import RDF
 
+import plumb.brick as brick
+import plumb.watr as watr
 from pype_schema.connection import Pipe
 from pype_schema.node import Digestion, Junction, Network, Pump, Tank
 from pype_schema.tag import Tag, TagType
 from pype_schema.units import u
-from pype_schema.utils import ContentsType, DigesterType, PumpType, parse_units
+from pype_schema.utils import ContentsType, DigesterType, PumpType, parse_quantity, parse_units
 
-from watr_codec.pypes_to_watr import NotImplementedWarning, PyPES2WaTr
+from watr_codec.pypes_to_watr import NotImplementedWarning, PyPES2WaTr, UnitConversionWarning
+
+LOCAL = Namespace("urn:ex/")
+S223 = Namespace("http://data.ashrae.org/standard223#")
+WATR = Namespace("https://watermetadata.org/ontology/watr#")
+QUDT = Namespace("http://qudt.org/schema/qudt/")
+QK = Namespace("http://qudt.org/vocab/quantitykind/")
+UNIT = Namespace("http://qudt.org/vocab/unit/")
+REC = Namespace("https://w3id.org/rec#")
+BRICK = Namespace("https://brickschema.org/schema/Brick#")
 
 
 # --------- Fixtures ---------
@@ -61,7 +72,7 @@ def pipe(source_tank, dest_tank):
         min_flow=None,
         max_flow=None,
         design_flow=None,
-        diameter=2.0,
+        diameter=u.Quantity(2.0, "inch"),
         friction=0.5,
     )
 
@@ -78,6 +89,35 @@ def run_status_tag():
         parent_id="Pump1",
         contents=None,
     )
+
+
+def make_pump(id_="Pump1"):
+    """Build a real brine `Pump` with no flow or power data."""
+    return Pump(
+        id_,
+        ContentsType.Brine,
+        ContentsType.Brine,
+        elevation=None,
+        min_flow=None,
+        max_flow=None,
+        design_flow=None,
+        power_rating=None,
+        num_units=1,
+        pump_type=PumpType.Constant,
+    )
+
+
+def translated(converter, *nodes, connections=(), tags=()):
+    """Translate nodes, then connections, then tags, and return the resolved graph."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", NotImplementedWarning)
+        for node in nodes:
+            converter.translate_node(node)
+        for conn in connections:
+            converter.translate_connection(conn)
+        for tag in tags:
+            converter.translate_tag(tag)
+    return converter.model.graph()
 
 
 # --------- _sanitize_id ---------
@@ -110,10 +150,21 @@ class TestConvertUnits:
         """`meter` should map to QUDT's `unit:M`."""
         assert converter.convert_units(parse_units("meter"))["name"] == "M"
 
-    def test_unit_mapped_to_empty_dict_returns_empty_dict(self, converter):
-        """A unit intentionally left unmapped in the mapping file returns {}."""
-        # "MGD" is present in the mapping but intentionally left unmapped ({}).
-        assert converter.convert_units(parse_units("MGD")) == {}
+    def test_rpm_maps_to_qudt_revolutions_per_minute(self, converter):
+        """RPM should map to QUDT's `unit:REV-PER-MIN`."""
+        assert converter.convert_units(parse_units("RPM"))["name"] == "REV-PER-MIN"
+
+    def test_unitless_returns_empty_dict(self, converter):
+        """A unitless value (units is None) has nothing to look up, so returns {}."""
+        assert converter.convert_units(None) == {}
+
+    def test_unit_without_qudt_equivalent_names_conversion_target(self, converter):
+        """MGD has no QUDT unit, so its entry names a unit to convert to instead."""
+        assert converter.convert_units(parse_units("MGD")) == {"convert_to": "meter ** 3 / day"}
+
+    def test_therm_maps_to_qudt_ec_therm(self, converter):
+        """Pint's `therm` is the EC therm, which QUDT calls `unit:THM_EEC`."""
+        assert converter.convert_units(parse_units("therm"))["name"] == "THM_EEC"
 
     def test_unmapped_unit_raises_key_error(self, converter):
         """A unit absent from the mapping entirely should raise KeyError."""
@@ -128,14 +179,20 @@ class TestConvertContents:
         """Contents with no associated role should omit the "role" key."""
         medium_dict = converter.convert_contents(ContentsType.Brine)
         assert medium_dict["name"] == "Water-Brine"
-        assert medium_dict["uri"] == "watr"
         assert "role" not in medium_dict
 
     def test_contents_with_role(self, converter):
-        """Contents with an associated role should include role/role-uri."""
-        medium_dict = converter.convert_contents(ContentsType.ProductWater)
-        assert medium_dict["role"] == "Role-Permeate"
-        assert medium_dict["role-uri"] == "watr"
+        """Contents with an associated role should include it."""
+        assert converter.convert_contents(ContentsType.ProductWater)["role"] == "Role-Permeate"
+
+    def test_sludge_contents_map_to_watr_sludge(self, converter):
+        """Sludge contents should map to WaTr's sludge medium."""
+        for contents in (ContentsType.PrimarySludge, ContentsType.WasteActivatedSludge, ContentsType.ThickenedSludgeBlend):
+            assert converter.convert_contents(contents)["name"] == "Fluid-Sludge"
+
+    def test_seawater_maps_to_watr_seawater(self, converter):
+        """Seawater should map to WaTr's seawater medium."""
+        assert converter.convert_contents(ContentsType.Seawater)["name"] == "Water-Seawater"
 
 
 class TestConvertAttribute:
@@ -151,20 +208,6 @@ class TestConvertAttribute:
         """An attribute absent from the mapping should raise KeyError."""
         with pytest.raises(KeyError):
             converter.convert_attribute("not_a_real_attribute")
-
-    def test_enumeration_kind_attribute_is_detected(self, converter):
-        """An attribute whose mapping entry has kind "EnumerationKind" should
-        be detected as an enumeration kind rather than a quantity kind."""
-        # TODO: replace with a real attribute once one with an EnumerationKind
-        # is added to the mapping (none exists yet)
-        converter.mapping["PyPES2WaTr"]["attributes"]["fake_enum_attr"] = {
-            "name": "Binary-OnOff",
-            "uri": "s223",
-            "kind": "EnumerationKind",
-        }
-        prop_data, is_quant_kind = converter.convert_attribute("fake_enum_attr")
-        assert is_quant_kind is False
-        assert prop_data["name"] == "Binary-OnOff"
 
 
 class TestConvertTagType:
@@ -182,17 +225,30 @@ class TestConvertTagType:
         assert is_quant_kind is False
         assert prop_data["name"] == "Binary-OnOff"
 
+    def test_speed_in_rpm_is_rotational_velocity(self, converter):
+        """In PyPES, Speed in RPM is a rotational speed."""
+        prop_data, _ = converter.convert_tag_type(TagType.Speed, parse_units("RPM"))
+        assert prop_data["name"] == "RotationalVelocity"
+
+    def test_speed_in_meters_per_second_is_speed(self, converter):
+        """In PyPES, Speed in m/s is a velocity."""
+        prop_data, _ = converter.convert_tag_type(TagType.Speed, parse_units("m/s"))
+        assert prop_data["name"] == "Speed"
+
+    def test_rotation_in_hertz_is_rotational_frequency(self, converter):
+        """In PyPES, Rotation in Hz is a rotational frequency."""
+        prop_data, _ = converter.convert_tag_type(TagType.Rotation, parse_units("Hz"))
+        assert prop_data["name"] == "RotationalFrequency"
+
     def test_unmapped_tag_type_raises_key_error(self, converter):
         """A tag type mapped to an empty placeholder should raise KeyError.
 
-        TDS is listed in the mapping but only as an empty placeholder ({}),
-        so looking up its "kind" key fails. This documents a real gap:
-        translate_tag() has no equivalent of NOT_YET_IMPLEMENTED_ATTRIBUTES
-        to skip these gracefully, so a TDS/COD/BOD/InFlow/OutFlow/NetFlow/
-        SetPoint tag currently crashes translation instead of warning.
+        COD is listed in the mapping but only as an empty placeholder ({}),
+        so looking up its "kind" key fails. COD, BOD, InFlow, OutFlow, NetFlow
+        and SetPoint are all still placeholders.
         """
         with pytest.raises(KeyError):
-            converter.convert_tag_type(TagType.TDS)
+            converter.convert_tag_type(TagType.COD)
 
     def test_unknown_kind_raises_value_error(self, converter):
         """A mapping entry whose kind is misspelled should raise ValueError
@@ -202,322 +258,184 @@ class TestConvertTagType:
             converter.convert_tag_type(TagType.Flow)
 
 
-# --------- generate_conn_point_name ---------
-class TestGenerateConnPointName:
-    """Tests for `PyPES2WaTr.generate_conn_point_name`."""
+# --------- plumb class lookup ---------
+class TestClassLookup:
+    """Tests for `PyPES2WaTr._class`."""
 
-    def test_returns_name_unchanged_when_unused(self, converter):
-        """A name with no existing collision should be returned unchanged."""
-        assert converter.generate_conn_point_name("Tank1-cp-1") == "Tank1-cp-1"
+    def test_rec_classes_come_from_plumb_brick(self, converter):
+        """Network maps to rec:Region, which plumb provides through Brick."""
+        assert converter._class(converter.mapping["PyPES2WaTr"]["nodes"]["Network"]) is brick.Region
 
-    def test_increments_suffix_on_collision(self, converter):
-        """A single collision should bump the numeric suffix by one."""
-        converter.conn_point_dict["Tank1-cp-1"] = {}
-        assert converter.generate_conn_point_name("Tank1-cp-1") == "Tank1-cp-2"
+    def test_s223_classes_come_from_plumb_watr(self, converter):
+        """223P classes come from plumb's WaTr package, whose copies work with WaTr equipment."""
+        assert converter._class(converter.mapping["PyPES2WaTr"]["connections"]["Pipe"]) is watr.Pipe
 
-    def test_keeps_incrementing_past_multiple_collisions(self, converter):
-        """Repeated collisions should keep incrementing the suffix, including
-        past single digits."""
-        for num in range(1, 10):
-            converter.conn_point_dict[f"Tank1-cp-{num}"] = {}
-        assert converter.generate_conn_point_name("Tank1-cp-1") == "Tank1-cp-10"
-
-    def test_collision_without_numeric_suffix_raises_value_error(self, converter):
-        """A taken name with no numeric suffix should raise rather than guess."""
-        converter.conn_point_dict["Tank1-cp"] = {}
-        with pytest.raises(ValueError):
-            converter.generate_conn_point_name("Tank1-cp")
-
-
-# --------- create_conn_points ---------
-class TestCreateConnPoints:
-    """Tests for `PyPES2WaTr.create_conn_points`."""
-
-    def test_creates_source_and_dest_points_with_medium_and_role(self, converter, source_tank, dest_tank):
-        """Both connection points should be typed and carry medium/role."""
-        permeate_pipe = Pipe(
-            "Pipe1", ContentsType.ProductWater, source_tank, dest_tank,
-            min_flow=None, max_flow=None, design_flow=None,
-        )
-
-        source_name, dest_name = converter.create_conn_points(permeate_pipe)
-
-        assert source_name == "Source-cp-1"
-        assert dest_name == "Dest-cp-1"
-        assert set(converter.conn_point_dict) == {"Source-cp-1", "Dest-cp-1"}
-
-        ns = converter.model.namespaces
-        s223, watr, local = ns["s223"], ns["watr"], ns["test"]
-        graph = converter.model.graph
-
-        assert (local["Source-cp-1"], RDF.type, s223["OutletConnectionPoint"]) in graph
-        assert (local["Dest-cp-1"], RDF.type, s223["InletConnectionPoint"]) in graph
-        assert (local["Source-cp-1"], s223["isConnectionPointOf"], local["Source"]) in graph
-        assert (local["Dest-cp-1"], s223["isConnectionPointOf"], local["Dest"]) in graph
-        assert (local["Source-cp-1"], s223["connectsThrough"], local["Pipe1"]) in graph
-        assert (local["Dest-cp-1"], s223["connectsThrough"], local["Pipe1"]) in graph
-
-        # ProductWater carries a role, so both connection points should get it.
-        assert (local["Source-cp-1"], s223["hasRole"], watr["Role-Permeate"]) in graph
-        assert (local["Dest-cp-1"], s223["hasRole"], watr["Role-Permeate"]) in graph
-
-    def test_repeated_node_id_gets_disambiguated_name(self, converter, source_tank, dest_tank, pipe):
-        """A node used as source in two connections should get -cp-1/-cp-2."""
-        other_tank = Tank("Other", ContentsType.Brine, ContentsType.Brine, elevation=None, volume=None)
-        second_pipe = Pipe(
-            "Pipe2", ContentsType.Brine, source_tank, other_tank,
-            min_flow=None, max_flow=None, design_flow=None,
-        )
-
-        source_name_1, _ = converter.create_conn_points(pipe)
-        source_name_2, _ = converter.create_conn_points(second_pipe)
-
-        assert source_name_1 == "Source-cp-1"
-        assert source_name_2 == "Source-cp-2"
+    def test_class_plumb_lacks_raises_key_error(self, converter):
+        """A mapped class plumb has no class for should raise a clear KeyError."""
+        with pytest.raises(KeyError, match="PressureReducingValve"):
+            converter._class(converter.mapping["PyPES2WaTr"]["nodes"]["PRV"])
 
 
 # --------- translate_attribute ---------
 class TestTranslateAttribute:
     """Tests for `PyPES2WaTr.translate_attribute`."""
 
-    def test_plain_value_has_no_unit_triple(self, converter):
-        """A plain (non-Pint) value should produce no hasUnit triple."""
-        result = converter.translate_attribute("elevation", 12.5, "Tank1")
+    def test_plain_dimensionless_value_is_unitless(self, converter, source_tank, dest_tank, pipe):
+        """A friction coefficient is dimensionless, so its plain number gets unit:UNITLESS."""
+        graph = translated(converter, source_tank, dest_tank, connections=[pipe])
+        term = LOCAL["Pipe1friction_coeff"]
 
-        assert result["prop_type"] == "QuantifiableProperty"
-        assert result["units"] == {}  # units dict should be empty since no pint units given
+        assert (term, RDF.type, S223["QuantifiableProperty"]) in graph
+        assert (term, QUDT["hasQuantityKind"], QK["FrictionCoefficient"]) in graph
+        assert (term, QUDT["hasUnit"], UNIT["UNITLESS"]) in graph
+        assert [o.toPython() for o in graph.objects(term, S223["hasValue"])] == [0.5]
 
-        ns = converter.model.namespaces
-        s223, qudt, qudtqk = ns["s223"], ns["qudt"], ns["qudtqk"]
-        graph = converter.model.graph
-        term = ns["test"]["Tank1elevation"]
+    def test_plain_dimensional_value_raises_value_error(self, converter):
+        """An elevation without units is incomplete, since 223P requires a unit."""
+        tank = Tank("Tank1", ContentsType.Brine, ContentsType.Brine, elevation=12.5, volume=None)
+        with pytest.raises(ValueError, match="Tank1elevation"):
+            converter.translate_node(tank)
 
-        assert (term, RDF.type, s223["QuantifiableProperty"]) in graph
-        assert (term, s223["hasValue"], converter.model.literal(12.5)) in graph
-        assert (term, qudt["hasQuantityKind"], qudtqk["Altitude"]) in graph
-        assert not list(graph.triples((term, s223["hasUnit"], None)))
+    def test_units_pype_schema_attaches_are_mapped(self, converter, source_tank, dest_tank, pipe):
+        """pype_schema reads diameters in inches and volumes in cubic meters."""
+        tank = Tank("Tank1", ContentsType.Brine, ContentsType.Brine, elevation=None, volume=parse_quantity(5.0, "m3"))
+        graph = translated(converter, tank, source_tank, dest_tank, connections=[pipe])
+
+        assert (LOCAL["Pipe1diameter"], QUDT["hasUnit"], UNIT["IN"]) in graph
+        assert (LOCAL["Tank1volume"], QUDT["hasUnit"], UNIT["M3"]) in graph
 
     def test_pint_value_extracts_magnitude_and_unit(self, converter):
         """A Pint quantity should have its magnitude and unit split apart."""
-        value = u.Quantity(3.0, "meter")
-        result = converter.translate_attribute("elevation", value, "Tank1")
+        tank = Tank("Tank1", ContentsType.Brine, ContentsType.Brine, elevation=u.Quantity(3.0, "meter"), volume=None)
+        graph = translated(converter, tank)
+        term = LOCAL["Tank1elevation"]
 
-        ns = converter.model.namespaces
-        s223 = ns["s223"]
-        graph = converter.model.graph
-        term = ns["test"]["Tank1elevation"]
-
-        assert result["units"]["name"] == "M"
-        assert (term, s223["hasValue"], converter.model.literal(3.0)) in graph
-        assert (term, s223["hasUnit"], ns["unit"]["M"]) in graph
+        assert [o.toPython() for o in graph.objects(term, S223["hasValue"])] == [3.0]
+        assert (term, QUDT["hasUnit"], UNIT["M"]) in graph
 
     def test_none_value_creates_no_property(self, converter):
         """An attribute without data should not be added to the graph at all."""
-        result = converter.translate_attribute("volume", None, "Tank1")
+        tank = Tank("Tank1", ContentsType.Brine, ContentsType.Brine, elevation=u.Quantity(3.0, "meter"), volume=None)
+        graph = translated(converter, tank)
+        term = LOCAL["Tank1volume"]
 
-        term = converter.model.namespaces["test"]["Tank1volume"]
-        graph = converter.model.graph
-
-        assert result is None
-        assert "Tank1volume" not in converter.property_dict
+        assert "Tank1volume" not in converter.properties
         assert not list(graph.triples((term, None, None)))
         assert not list(graph.triples((None, None, term)))
 
-    def test_contents_adds_medium_and_role(self, converter):
-        """Passing contents with a role should add ofMedium and hasRole triples."""
-        converter.translate_attribute("diameter", 1.0, "Pipe1", contents=ContentsType.ProductWater)
+    def test_connection_attributes_are_properties_of_the_pipe(self, converter, source_tank, dest_tank, pipe):
+        """A connection's attributes should be properties of the resolved pipe."""
+        graph = translated(converter, source_tank, dest_tank, connections=[pipe])
 
-        ns = converter.model.namespaces
-        s223, watr = ns["s223"], ns["watr"]
-        graph = converter.model.graph
-        term = ns["test"]["Pipe1diameter"]
-
-        assert (term, s223["ofMedium"], s223["Fluid-Water"]) in graph
-        assert (term, s223["hasRole"], watr["Role-Permeate"]) in graph
-
-    def test_enumeration_kind_attribute_uses_has_enumeration_kind(self, converter):
-        """An enumeration-kind attribute should use hasEnumerationKind."""
-        # TODO: replace with a real attribute once one with an EnumerationKind
-        # is added to the mapping (none exists yet)
-        converter.mapping["PyPES2WaTr"]["attributes"]["fake_enum_attr"] = {
-            "name": "Binary-OnOff",
-            "uri": "s223",
-            "kind": "EnumerationKind",
-        }
-        result = converter.translate_attribute("fake_enum_attr", "on", "Tank1")
-
-        assert result["prop_type"] == "EnumerableProperty"
-
-        ns = converter.model.namespaces
-        s223, qudt = ns["s223"], ns["qudt"]
-        graph = converter.model.graph
-        term = ns["test"]["Tank1fake_enum_attr"]
-
-        assert (term, RDF.type, s223["EnumerableProperty"]) in graph
-        assert (term, s223["hasEnumerationKind"], s223["Binary-OnOff"]) in graph
-        assert not list(graph.triples((term, qudt["hasQuantityKind"], None)))
+        assert (LOCAL["Pipe1"], S223["hasProperty"], LOCAL["Pipe1diameter"]) in graph
+        assert (LOCAL["Pipe1"], S223["hasProperty"], LOCAL["Pipe1friction_coeff"]) in graph
 
 
 # --------- translate_tag ---------
 class TestTranslateTag:
     """Tests for `PyPES2WaTr.translate_tag`."""
 
-    def test_basic_quantifiable_tag(self, converter):
-        """A normal quantifiable tag should get quantity kind, unit, and medium."""
-        tag = Tag(
-            "FlowTag",
-            units=parse_units("gal/min"),
-            tag_type=TagType.Flow,
-            source_unit_id=1,
-            dest_unit_id=2,
-            parent_id="Tank1",
-            contents=ContentsType.Brine,
-        )
-        result = converter.translate_tag(tag)
+    def test_flow_tag_becomes_a_flow_sensor_on_its_pipe(self, converter, source_tank, dest_tank, pipe):
+        """A flow tag on a pipe should be a flow sensor observing a flow-rate property."""
+        tag = Tag("FlowTag", parse_units("gal/min"), TagType.Flow, 1, 2, "Pipe1", contents=ContentsType.Brine)
+        graph = translated(converter, source_tank, dest_tank, connections=[pipe], tags=[tag])
+        sensor, value = LOCAL["FlowTag"], LOCAL["FlowTag-value"]
 
-        assert result["prop_type"] == "QuantifiableObservableProperty"
-        assert result["source_unit_id"] == 1
-        assert result["dest_unit_id"] == 2
+        assert (sensor, RDF.type, WATR["FlowSensor"]) in graph
+        assert (sensor, S223["hasObservationLocation"], LOCAL["Pipe1"]) in graph
+        assert (sensor, S223["observes"], value) in graph
+        assert (value, RDF.type, S223["QuantifiableObservableProperty"]) in graph
+        assert (value, QUDT["hasQuantityKind"], QK["VolumeFlowRate"]) in graph
+        assert (value, QUDT["hasUnit"], UNIT["GAL_US-PER-MIN"]) in graph
+        assert (value, S223["ofMedium"], WATR["Water-Brine"]) in graph
 
-        ns = converter.model.namespaces
-        s223, qudt, qudtqk, unit, watr = ns["s223"], ns["qudt"], ns["qudtqk"], ns["unit"], ns["watr"]
-        graph = converter.model.graph
-        term = ns["test"]["FlowTag"]
+    def test_tss_tag_adds_suspended_solids_substance(self, converter):
+        """A TSS tag should be a concentration of suspended solids."""
+        tank = Tank("Tank1", ContentsType.Brine, ContentsType.Brine, elevation=None, volume=None)
+        tag = Tag("TSSTag", parse_units("mg/L"), TagType.TSS, "total", "total", "Tank1", contents=ContentsType.Brine)
+        graph = translated(converter, tank, tags=[tag])
 
-        assert (term, RDF.type, s223["QuantifiableObservableProperty"]) in graph
-        assert (term, qudt["hasQuantityKind"], qudtqk["VolumeFlowRate"]) in graph
-        assert (term, s223["hasUnit"], unit["GAL_US-PER-MIN"]) in graph
-        assert (term, s223["ofMedium"], watr["Water-Brine"]) in graph
+        assert (LOCAL["TSSTag-value"], S223["ofSubstance"], WATR["Constituent-SuspendedSolids"]) in graph
 
-    def test_tss_tag_adds_substance(self, converter):
-        """A TSS tag should link to the suspended-solids substance."""
-        tag = Tag(
-            "TSSTag",
-            units=parse_units("mg/L"),
-            tag_type=TagType.TSS,
-            source_unit_id="total",
-            dest_unit_id="total",
-            parent_id="Tank1",
-            contents=ContentsType.Brine,
-        )
-        converter.translate_tag(tag)
+    def test_tds_tag_adds_dissolved_solids_substance(self, converter):
+        """A TDS tag should be a concentration of dissolved solids."""
+        tank = Tank("Tank1", ContentsType.Brine, ContentsType.Brine, elevation=None, volume=None)
+        tag = Tag("TDSTag", parse_units("mg/L"), TagType.TDS, "total", "total", "Tank1", contents=ContentsType.Brine)
+        graph = translated(converter, tank, tags=[tag])
+        value = LOCAL["TDSTag-value"]
 
-        ns = converter.model.namespaces
-        term = ns["test"]["TSSTag"]
-        assert (term, ns["s223"]["ofSubstance"], ns["watr"]["Constituent-SuspendedSolids"]) in converter.model.graph
+        assert (value, QUDT["hasQuantityKind"], QK["MassConcentration"]) in graph
+        assert (value, S223["ofSubstance"], WATR["Constituent-DissolvedSolids"]) in graph
+
+    def test_rotational_speed_tag(self, converter):
+        """A Speed tag in RPM should observe a rotational velocity."""
+        tag = Tag("PumpSpeed", parse_units("RPM"), TagType.Speed, "total", "total", "Pump1", contents=ContentsType.Brine)
+        graph = translated(converter, make_pump(), tags=[tag])
+        value = LOCAL["PumpSpeed-value"]
+
+        assert (value, QUDT["hasQuantityKind"], QK["RotationalVelocity"]) in graph
+        assert (value, QUDT["hasUnit"], UNIT["REV-PER-MIN"]) in graph
 
     def test_status_tag_uses_enumeration_kind(self, converter, run_status_tag):
-        """A RunStatus tag should be an enumerated property of kind Binary-OnOff."""
-        result = converter.translate_tag(run_status_tag)
+        """A RunStatus tag should observe an enumerated property of kind Binary-OnOff."""
+        graph = translated(converter, make_pump(), tags=[run_status_tag])
+        value = LOCAL["PumpStatus-value"]
 
-        ns = converter.model.namespaces
-        s223, qudt = ns["s223"], ns["qudt"]
-        graph = converter.model.graph
-        term = ns["test"]["PumpStatus"]
+        assert (value, RDF.type, S223["EnumeratedObservableProperty"]) in graph
+        assert (value, S223["hasEnumerationKind"], S223["Binary-OnOff"]) in graph
+        assert not list(graph.objects(value, QUDT["hasQuantityKind"]))
 
-        assert result["prop_type"] == "EnumeratedObservableProperty"
-        assert (term, RDF.type, s223["EnumeratedObservableProperty"]) in graph
-        assert (term, s223["hasEnumerationKind"], s223["Binary-OnOff"]) in graph
-        assert not list(graph.triples((term, qudt["hasQuantityKind"], None)))
+    def test_unitless_contentless_tag_has_no_unit_or_medium(self, converter, run_status_tag):
+        """A RunStatus tag has neither units nor contents, so neither appears."""
+        graph = translated(converter, make_pump(), tags=[run_status_tag])
+        value = LOCAL["PumpStatus-value"]
 
-    def test_unitless_tag_is_supported(self, converter, run_status_tag):
-        """A tag with no units should translate, with no hasUnit triple."""
-        result = converter.translate_tag(run_status_tag)
-
-        term = converter.model.namespaces["test"]["PumpStatus"]
-        has_unit = converter.model.namespaces["s223"]["hasUnit"]
-
-        assert result["units"] == {}
-        assert not list(converter.model.graph.triples((term, has_unit, None)))
-
-    def test_contentless_tag_has_no_medium_triple(self, converter, run_status_tag):
-        """A contentless tag type (e.g. RunStatus) should produce no ofMedium triple."""
-        converter.translate_tag(run_status_tag)
-
-        term = converter.model.namespaces["test"]["PumpStatus"]
-        of_medium = converter.model.namespaces["s223"]["ofMedium"]
-        assert not list(converter.model.graph.triples((term, of_medium, None)))
+        assert not list(graph.objects(value, QUDT["hasUnit"]))
+        assert not list(graph.objects(value, S223["ofMedium"]))
 
     def test_missing_contents_on_non_contentless_tag_raises_value_error(self, converter):
         """A Flow tag must have contents in PyPES, so omitting them is an error."""
-        tag = Tag(
-            "FlowTag",
-            units=parse_units("gal/min"),
-            tag_type=TagType.Flow,
-            source_unit_id="total",
-            dest_unit_id="total",
-            parent_id="Tank1",
-            contents=None,
-        )
+        tag = Tag("FlowTag", parse_units("gal/min"), TagType.Flow, "total", "total", "Pump1", contents=None)
+        translated(converter, make_pump())
         with pytest.raises(ValueError):
             converter.translate_tag(tag)
+
+    def test_tag_unit_without_qudt_equivalent_warns_and_has_no_unit(self, converter):
+        """An MGD tag's data can't be converted by the codec, so it warns and gets no unit."""
+        tag = Tag("PlantFlow", parse_units("MGD"), TagType.Flow, "total", "total", "Pump1", contents=ContentsType.Brine)
+        translated(converter, make_pump())
+        with pytest.warns(UnitConversionWarning, match="PlantFlow"):
+            converter.translate_tag(tag)
+
+        graph = converter.model.graph()
+        value = LOCAL["PlantFlow-value"]
+        assert (value, QUDT["hasQuantityKind"], QK["VolumeFlowRate"]) in graph
+        assert not list(graph.objects(value, QUDT["hasUnit"]))
 
 
 # --------- translate_node ---------
 class TestTranslateNode:
     """Tests for `PyPES2WaTr.translate_node`."""
 
-    def test_translates_type_and_attributes(self, converter):
-        """A node's type and its attributes with data should be translated."""
-        tank = Tank("Tank1", ContentsType.Brine, ContentsType.Brine, elevation=3.0, volume=None)
-        result = converter.translate_node(tank)
-
-        ns = converter.model.namespaces
-        local, watr, s223 = ns["test"], ns["watr"], ns["s223"]
-        graph = converter.model.graph
-
-        assert result["node"] == "Tank"
-        assert (local["Tank1"], RDF.type, watr["Tank"]) in graph
-        # elevation should have become a property linked back to the node...
-        assert (local["Tank1"], s223["hasProperty"], local["Tank1elevation"]) in graph
-        # ...but volume has no data, so it should not exist at all
-        assert (local["Tank1"], s223["hasProperty"], local["Tank1volume"]) not in graph
+    def test_translates_type(self, converter, source_tank):
+        """A node should become equipment of its mapped WaTr class."""
+        graph = translated(converter, source_tank)
+        assert (LOCAL["Source"], RDF.type, WATR["Tank"]) in graph
 
     def test_not_yet_implemented_attribute_warns_and_is_skipped(self, converter):
         """A not-yet-implemented attribute should warn and not be translated."""
-        pump = Pump(
-            "Pump1",
-            ContentsType.Brine,
-            ContentsType.Brine,
-            elevation=None,
-            min_flow=None,
-            max_flow=None,
-            design_flow=None,
-            power_rating=None,
-            num_units=1,
-            pump_type=PumpType.Constant,
-        )
-
         with pytest.warns(NotImplementedWarning, match="pump_type"):
-            converter.translate_node(pump)
+            converter.translate_node(make_pump())
 
-        local = converter.model.namespaces["test"]
-        assert not list(converter.model.graph.triples((None, None, local["Pump1pump_type"])))
-        assert "Pump1pump_type" not in converter.property_dict
+        assert "Pump1pump_type" not in converter.properties
+        assert not list(converter.model.graph().triples((LOCAL["Pump1pump_type"], None, None)))
 
-    def test_hides_medium_duplicates(self, converter):
-        """Repeated media across input/output contents should be deduped."""
-        tank = Tank(
-            "MultiTank",
-            input_contents=[ContentsType.Brine, ContentsType.Brine],
-            output_contents=[ContentsType.Brine],
-            elevation=None,
-            volume=None,
-        )
-        converter.translate_node(tank)
-
-        ns = converter.model.namespaces
-        local, s223, watr = ns["test"], ns["s223"], ns["watr"]
-        media_triples = list(converter.model.graph.triples((local["MultiTank"], s223["hasMedium"], None)))
-        assert media_triples == [(local["MultiTank"], s223["hasMedium"], watr["Water-Brine"])]
-
-    def test_hasprocess_added_when_node_type_declares_a_process(self, converter):
-        """A node type whose mapping entry declares a process should link it."""
-        # NOTE: Brine is used because sludge/biogas contents are not yet in the mapping
+    def test_digester_gets_process_and_digester_type_role(self, converter):
+        """A digester should have its process and its type as a WaTr role."""
         digester = Digestion(
             "Digester1",
-            ContentsType.Brine,
-            ContentsType.Brine,
+            ContentsType.ThickenedSludgeBlend,
+            ContentsType.SludgeBlend,
             min_flow=None,
             max_flow=None,
             design_flow=None,
@@ -525,64 +443,41 @@ class TestTranslateNode:
             volume=None,
             digester_type=DigesterType.Anaerobic,
         )
-
-        with pytest.warns(NotImplementedWarning, match="digester_type"):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", NotImplementedWarning)
             converter.translate_node(digester)
 
-        ns = converter.model.namespaces
-        assert (ns["test"]["Digester1"], ns["watr"]["hasProcess"], ns["watr"]["Process-Digestion"]) in converter.model.graph
-
-    def test_cnx_added_for_node_with_inbound_and_outbound_connection(self, converter, source_tank, dest_tank):
-        """A node with one inbound and one outbound connection gets 2 cnx triples."""
-        junction = Junction("Middle", ContentsType.Brine, ContentsType.Brine)
-        inbound = Pipe("InPipe", ContentsType.Brine, source_tank, junction, min_flow=None, max_flow=None, design_flow=None)
-        outbound = Pipe("OutPipe", ContentsType.Brine, junction, dest_tank, min_flow=None, max_flow=None, design_flow=None)
-
-        converter.translate_connection(inbound)
-        converter.translate_connection(outbound)
-        converter.translate_node(junction)
-
-        ns = converter.model.namespaces
-        local, s223 = ns["test"], ns["s223"]
-        cnx_triples = list(converter.model.graph.triples((local["Middle"], s223["cnx"], None)))
-        cnx_targets = {str(o) for _, _, o in cnx_triples}
-        assert str(local["Middle-cp-1"]) in cnx_targets  # inbound dest point
-        assert str(local["Middle-cp-2"]) in cnx_targets  # outbound source point
-        assert len(cnx_triples) == 2
-
-    def test_no_cnx_when_only_inbound_connection_exists(self, converter, source_tank):
-        """A node with only an inbound connection should get no cnx triples."""
-        junction = Junction("DeadEnd", ContentsType.Brine, ContentsType.Brine)
-        inbound = Pipe("InPipe", ContentsType.Brine, source_tank, junction, min_flow=None, max_flow=None, design_flow=None)
-
-        converter.translate_connection(inbound)
-        converter.translate_node(junction)
-
-        ns = converter.model.namespaces
-        assert not list(converter.model.graph.triples((ns["test"]["DeadEnd"], ns["s223"]["cnx"], None)))
+        graph = converter.model.graph()
+        assert (LOCAL["Digester1"], WATR["hasProcess"], WATR["Process-Digestion"]) in graph
+        assert (LOCAL["Digester1"], S223["hasRole"], WATR["Role-Anaerobic"]) in graph
 
 
 # --------- translate_connection ---------
 class TestTranslateConnection:
     """Tests for `PyPES2WaTr.translate_connection`."""
 
-    def test_translates_type_medium_and_attributes(self, converter, pipe):
-        """A connection's type, medium, and attributes should be translated."""
-        result = converter.translate_connection(pipe)
+    def test_translates_type_medium_and_points(self, converter, source_tank, dest_tank, pipe):
+        """A connection should be a pipe joining a named outlet and inlet point."""
+        graph = translated(converter, source_tank, dest_tank, connections=[pipe])
 
-        ns = converter.model.namespaces
-        local, s223, watr = ns["test"], ns["s223"], ns["watr"]
-        graph = converter.model.graph
+        assert (LOCAL["Pipe1"], RDF.type, S223["Pipe"]) in graph
+        assert (LOCAL["Pipe1"], S223["hasMedium"], WATR["Water-Brine"]) in graph
+        assert (LOCAL["Pipe1-out"], RDF.type, S223["OutletConnectionPoint"]) in graph
+        assert (LOCAL["Pipe1-in"], RDF.type, S223["InletConnectionPoint"]) in graph
+        assert (LOCAL["Pipe1-out"], S223["isConnectionPointOf"], LOCAL["Source"]) in graph
+        assert (LOCAL["Pipe1-in"], S223["isConnectionPointOf"], LOCAL["Dest"]) in graph
 
-        assert (local["Pipe1"], RDF.type, s223["Pipe"]) in graph
-        assert (local["Pipe1"], s223["hasMedium"], watr["Water-Brine"]) in graph
-        assert (local["Pipe1"], s223["hasProperty"], local["Pipe1diameter"]) in graph
-        assert (local["Pipe1"], s223["hasProperty"], local["Pipe1friction_coeff"]) in graph
-        assert result["source"] == "Source"
-        assert result["destination"] == "Dest"
+    def test_contents_role_is_added_to_the_pipe(self, converter, source_tank, dest_tank):
+        """ProductWater carries the permeate role, which should be on the pipe."""
+        permeate_pipe = Pipe("Pipe1", ContentsType.ProductWater, source_tank, dest_tank, None, None, None)
+        graph = translated(converter, source_tank, dest_tank, connections=[permeate_pipe])
 
-    def test_not_yet_implemented_attributes_warn(self, converter, pipe):
+        assert (LOCAL["Pipe1"], S223["hasMedium"], S223["Fluid-Water"]) in graph
+        assert (LOCAL["Pipe1"], S223["hasRole"], WATR["Role-Permeate"]) in graph
+
+    def test_not_yet_implemented_attributes_warn(self, converter, source_tank, dest_tank, pipe):
         """heating_values and bidirectional should each raise a warning."""
+        translated(converter, source_tank, dest_tank)
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             converter.translate_connection(pipe)
@@ -591,115 +486,116 @@ class TestTranslateConnection:
         assert any("heating_values" in m for m in messages)
         assert any("bidirectional" in m for m in messages)
 
-    def test_updates_node_to_conn_ids_for_both_endpoints(self, converter, pipe):
-        """Both the source and destination node should track the connection."""
-        converter.translate_connection(pipe)
-
-        assert "Pipe1" in converter.node_to_conn_ids["Source"]
-        assert "Pipe1" in converter.node_to_conn_ids["Dest"]
-
-    def test_invalid_endpoints_raise_value_error_in_translate_node(self, converter, pipe):
-        """A connection tracked against a node that isn't its endpoint should
-        cause translate_node() to raise ValueError."""
+    def test_node_in_several_connections_gets_a_point_for_each(self, converter, source_tank, dest_tank, pipe):
+        """A node that is the source of two pipes should get two outlet points."""
         other_tank = Tank("Other", ContentsType.Brine, ContentsType.Brine, elevation=None, volume=None)
+        second_pipe = Pipe("Pipe2", ContentsType.Brine, source_tank, other_tank, None, None, None)
+        graph = translated(converter, source_tank, dest_tank, other_tank, connections=[pipe, second_pipe])
 
-        converter.translate_connection(pipe)
-        converter.node_to_conn_ids.setdefault("Other", []).append("Pipe1")
+        points = set(graph.objects(LOCAL["Source"], S223["hasConnectionPoint"]))
+        assert {LOCAL["Pipe1-out"], LOCAL["Pipe2-out"]} <= points
 
-        with pytest.raises(ValueError):
-            converter.translate_node(other_tank)
+    def test_junction_direction_comes_from_the_connection(self, converter, source_tank, dest_tank):
+        """A junction's points face the way the PyPES connections flow."""
+        junction = Junction("Middle", ContentsType.Brine, ContentsType.Brine)
+        inbound = Pipe("InPipe", ContentsType.Brine, source_tank, junction, None, None, None)
+        outbound = Pipe("OutPipe", ContentsType.Brine, junction, dest_tank, None, None, None)
+        graph = translated(converter, source_tank, junction, dest_tank, connections=[inbound, outbound])
+
+        assert (LOCAL["InPipe-in"], S223["isConnectionPointOf"], LOCAL["Middle"]) in graph
+        assert (LOCAL["OutPipe-out"], S223["isConnectionPointOf"], LOCAL["Middle"]) in graph
 
 
-# --------- translate_network (integration of the pieces above) ---------
+# --------- translate_network ---------
 class TestTranslateNetwork:
     """Tests for `PyPES2WaTr.translate_network`."""
 
     def test_translates_nodes_connections_and_tags(self, converter, source_tank):
         """A flat network's nodes, connections, and tags should all be translated."""
-        level_tag = Tag(
-            "LevelTag",
-            units=parse_units("meter"),
-            tag_type=TagType.Level,
-            source_unit_id="total",
-            dest_unit_id="total",
-            parent_id="Tank2",
-            contents=ContentsType.Brine,
-        )
+        level_tag = Tag("LevelTag", parse_units("meter"), TagType.Level, "total", "total", "Tank2", contents=ContentsType.Brine)
         tank2 = Tank("Tank2", ContentsType.Brine, ContentsType.Brine, elevation=None, volume=None, tags={"LevelTag": level_tag})
-        pipe = Pipe("Pipe1", ContentsType.Brine, source_tank, tank2, min_flow=None, max_flow=None, design_flow=None)
-
-        network = Network(
-            "World",
-            ContentsType.Brine,
-            ContentsType.Brine,
-            nodes={"Source": source_tank, "Tank2": tank2},
-            connections={"Pipe1": pipe},
-        )
-        converter.world = network
-        converter.translate_network(network)
-
-        assert set(converter.node_dict) == {"Source", "Tank2"}
-        assert set(converter.conn_dict) == {"Pipe1"}
-        assert "LevelTag" in converter.property_dict
-
-    def test_recurses_into_nested_network_and_adds_it_as_a_node(self, converter, source_tank, dest_tank):
-        """A nested Network's children should be translated, and the nested
-        Network itself should also be translated as a node of its parent."""
-        sub_network = Network(
-            "SubNet",
-            ContentsType.Brine,
-            ContentsType.Brine,
-            nodes={"Source": source_tank},
-            connections={},
-        )
-        world = Network(
-            "World",
-            ContentsType.Brine,
-            ContentsType.Brine,
-            nodes={"Dest": dest_tank, "SubNet": sub_network},
-            connections={},
-        )
-        converter.world = world
-        converter.translate_network(world)
-
-        # the nested Network's children are translated...
-        assert "Source" in converter.node_dict
-        # ...and the sub-network itself is translated as a node of its parent,
-        # since converter.world.id ("World") != sub_network.id ("SubNet").
-        assert "SubNet" in converter.node_dict
-
-        ns = converter.model.namespaces
-        assert (ns["test"]["SubNet"], RDF.type, ns["rec"]["Region"]) in converter.model.graph
-
-
-# --------- to_graph / export_ttl ---------
-class TestToGraphAndExport:
-    """Tests for `PyPES2WaTr.to_graph` and `PyPES2WaTr.export_ttl`."""
-
-    def test_to_graph_is_idempotent(self, converter, source_tank):
-        """Calling to_graph() twice should not re-run the translation."""
+        pipe = Pipe("Pipe1", ContentsType.Brine, source_tank, tank2, None, None, None)
         converter.world = Network(
-            "World", ContentsType.Brine, ContentsType.Brine, nodes={"Source": source_tank}, connections={}
+            "World", ContentsType.Brine, ContentsType.Brine,
+            nodes={"Source": source_tank, "Tank2": tank2}, connections={"Pipe1": pipe},
+        )
+        converter.to_graph()
+
+        assert set(converter.entities) == {"Source", "Tank2"}
+        assert set(converter.connections) == {"Pipe1"}
+        assert set(converter.sensors) == {"LevelTag"}
+
+    def test_nested_network_is_a_rec_region_located_around_its_nodes(self, converter, source_tank):
+        """A nested network should be a rec:Region that is the location of its nodes,
+        and a pipe into it should attach to its entry point."""
+        pump = make_pump()
+        sub_network = Network("SubNet", ContentsType.Brine, ContentsType.Brine, nodes={"Pump1": pump}, connections={})
+        inbound = Pipe("InPipe", ContentsType.Brine, source_tank, sub_network, None, None, None, entry_point=pump)
+        converter.world = Network(
+            "World", ContentsType.Brine, ContentsType.Brine,
+            nodes={"Source": source_tank, "SubNet": sub_network}, connections={"InPipe": inbound},
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", NotImplementedWarning)
+            graph = converter.to_graph()
+
+        assert (LOCAL["SubNet"], RDF.type, REC["Region"]) in graph
+        assert (LOCAL["SubNet"], BRICK["isLocationOf"], LOCAL["Pump1"]) in graph
+        assert (LOCAL["InPipe-in"], S223["isConnectionPointOf"], LOCAL["Pump1"]) in graph
+
+    def test_connection_to_network_without_entry_point_raises_value_error(self, converter, source_tank):
+        """rec spaces can't be connected, so a pipe into a network must name its entry point."""
+        sub_network = Network("SubNet", ContentsType.Brine, ContentsType.Brine, nodes={"Pump1": make_pump()}, connections={})
+        inbound = Pipe("InPipe", ContentsType.Brine, source_tank, sub_network, None, None, None)
+        converter.world = Network(
+            "World", ContentsType.Brine, ContentsType.Brine,
+            nodes={"Source": source_tank, "SubNet": sub_network}, connections={"InPipe": inbound},
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", NotImplementedWarning)
+            with pytest.raises(ValueError, match="entry_point"):
+                converter.to_graph()
+
+
+# --------- to_graph / validate / export_ttl ---------
+class TestToGraphValidateAndExport:
+    """Tests for `PyPES2WaTr.to_graph`, `validate`, and `export_ttl`."""
+
+    @pytest.fixture
+    def small_world(self, source_tank, dest_tank, pipe):
+        """A two-tank network joined by one pipe."""
+        return Network(
+            "World", ContentsType.Brine, ContentsType.Brine,
+            nodes={"Source": source_tank, "Dest": dest_tank}, connections={"Pipe1": pipe},
         )
 
-        graph1 = converter.to_graph()
+    def test_to_graph_is_idempotent(self, converter, small_world):
+        """Calling to_graph() twice should not re-run the translation."""
+        converter.world = small_world
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", NotImplementedWarning)
+            graph1 = converter.to_graph()
         triple_count = len(graph1)
         graph2 = converter.to_graph()
 
-        assert converter._translated is True
         assert graph1 is graph2
         assert len(graph2) == triple_count
 
-    def test_export_ttl_writes_valid_turtle(self, converter, tmp_path):
+    def test_validate_conforms(self, converter, small_world):
+        """The translated model should conform to the WaTr and 223P shapes."""
+        converter.world = small_world
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", NotImplementedWarning)
+            report = converter.validate()
+        assert report, str(report)
+
+    def test_export_ttl_writes_valid_turtle(self, converter, small_world, tmp_path):
         """export_ttl() should write a file that reparses to the same graph."""
-        tank = Tank("Tank1", ContentsType.Brine, ContentsType.Brine, elevation=3.0, volume=None)
-        converter.world = Network(
-            "World", ContentsType.Brine, ContentsType.Brine, nodes={"Tank1": tank}, connections={}
-        )
+        converter.world = small_world
         outpath = tmp_path / "out.ttl"
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", NotImplementedWarning)
+            converter.export_ttl(str(outpath))
 
-        converter.export_ttl(str(outpath))
-
-        assert outpath.exists()
         reparsed = Graph().parse(str(outpath), format="turtle")
-        assert len(reparsed) == len(converter.model.graph)
+        assert len(reparsed) == len(converter.to_graph())

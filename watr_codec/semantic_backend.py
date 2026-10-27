@@ -3,6 +3,7 @@ from typing import Any
 
 from rdflib import Graph, Literal, Namespace, URIRef
 from rdflib.namespace import RDF
+from semantic_objects.namespaces import bind_prefixes
 
 
 def _namespace_uri(value: str) -> str:
@@ -23,36 +24,18 @@ def _namespace_uri(value: str) -> str:
     return value.strip().removeprefix("<").removesuffix(">")
 
 
-def _bind_semantic_object_prefixes(graph: Graph) -> None:
-    """Use semantic_objects prefix bindings when the runtime provides them."""
-    try:
-        import typing
-        from typing_extensions import Self
-
-        if not hasattr(typing, "Self"):
-            typing.Self = Self
-
-        from semantic_objects.namespaces import bind_prefixes
-    except Exception:
-        return
-
-    bind_prefixes(graph)
-
-
-@dataclass(frozen=True)
+@dataclass
 class SemanticTerm:
-    """An RDF term (IRI) usable as a subject, predicate, or object."""
+    """An RDF term (IRI) usable as a subject, predicate, or object.
+
+    Attributes
+    ----------
+    iri : rdflib.URIRef
+        The term's full IRI, e.g. `http://data.ashrae.org/standard223#hasMedium`.
+        This is what gets written into the rdflib graph.
+    """
 
     iri: URIRef
-
-
-@dataclass(frozen=True)
-class SemanticStatement:
-    """A single (subject, predicate, object) RDF statement."""
-
-    subject: SemanticTerm
-    predicate: SemanticTerm
-    object: SemanticTerm | Literal
 
 
 class SemanticModel:
@@ -85,7 +68,7 @@ class SemanticModel:
         }
         self.namespaces[local_prefix] = Namespace(local_namespace)
 
-        _bind_semantic_object_prefixes(self.graph)
+        bind_prefixes(self.graph)
         for prefix, namespace in self.namespaces.items():
             self.graph.bind(prefix, namespace)
 

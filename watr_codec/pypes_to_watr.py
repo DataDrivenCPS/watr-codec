@@ -5,24 +5,71 @@ import warnings
 import pint
 from pype_schema import connection, utils
 from pype_schema.node import Network, Node
-from pype_schema.tag import Tag, TagType, VirtualTag
+from pype_schema.tag import CONTENTLESS_TYPES, Tag, TagType, VirtualTag
 
 from watr_codec.semantic_backend import SemanticModel, SemanticTerm
 
 
+# add this file path to dir so that data folder is always accessible
 WATR_CODEC_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# strings are stored as global variables to avoid hardcoding
+# keys of the PyPES2WaTr mapping file (`pypes_watr_mapping.json`)
 TOP_LEVEL_KEY = "PyPES2WaTr"
-PROCESS_KEY = "process"
+NODES_KEY = "nodes"
+CONNECTIONS_KEY = "connections"
+TAG_TYPES_KEY = "tag_types"
+ATTRIBUTES_KEY = "attributes"
+CONTENTS_TYPES_KEY = "contents_types"
 UNITS_KEY = "units"
+PROCESS_KEY = "process"
 NAME_KEY = "name"
 URI_KEY = "uri"
+KIND_KEY = "kind"
+ROLE_KEY = "role"
+ROLE_URI_KEY = "role-uri"
+SUBSTANCE_KEY = "substance"
+SUBSTANCE_URI_KEY = "substance-uri"
+
+# allowed values of the mapping file's `kind` key
+QUANT_KIND_STR = "QuantityKind"
 ENUM_KIND_STR = "EnumerationKind"
+
+# namespace prefixes (see `uri_mapping.json`)
 S223_URI = "s223"
 WATR_URI = "watr"
 QUDT_URI = "qudt"
 OWL_URI = "owl"
 
+# RDF classes
+QUANT_PROP_CLASS = "QuantifiableProperty"
+ENUM_PROP_CLASS = "EnumerableProperty"
+QUANT_OBS_PROP_CLASS = "QuantifiableObservableProperty"
+ENUM_OBS_PROP_CLASS = "EnumeratedObservableProperty"
+OUTLET_CONN_POINT_CLASS = "OutletConnectionPoint"
+INLET_CONN_POINT_CLASS = "InletConnectionPoint"
+ONTOLOGY_CLASS = "Ontology"
+
+# RDF predicates
+HAS_VALUE_PRED = "hasValue"
+HAS_UNIT_PRED = "hasUnit"
+HAS_QUANT_KIND_PRED = "hasQuantityKind"
+HAS_ENUM_KIND_PRED = "hasEnumerationKind"
+HAS_MEDIUM_PRED = "hasMedium"
+OF_MEDIUM_PRED = "ofMedium"
+HAS_ROLE_PRED = "hasRole"
+OF_SUBSTANCE_PRED = "ofSubstance"
+HAS_PROPERTY_PRED = "hasProperty"
+HAS_PROCESS_PRED = "hasProcess"
+HAS_CONN_POINT_PRED = "hasConnectionPoint"
+IS_CONN_POINT_OF_PRED = "isConnectionPointOf"
+CONNECTS_THROUGH_PRED = "connectsThrough"
+CNX_PRED = "cnx"
+
+# connection points are named `{node_id}-cp-{n}`
+CONN_POINT_STR = "-cp-"
+
+# These attributes are handled by custom logic and not automatically
 CUSTOM_HANDLED_ATTRIBUTES = [
     "nodes",
     "connections",
@@ -43,16 +90,17 @@ NOT_YET_IMPLEMENTED_ATTRIBUTES = [
     "heating_values",
     "pressure",
     "flow_rate",
-    "flowrate",
     "bidirectional",
     "pump_type",
     "pump_curve",
+    "digester_type",
     "area",
     "selectivity",
     "settling_time",
 ]
 
 
+# Define a custom warning category
 class NotImplementedWarning(UserWarning):
     """Warning category raised when a PyPES attribute has no WaTr translation yet.
 
@@ -243,7 +291,7 @@ class PyPES2WaTr:
             The mapping-file entry describing the corresponding WaTr medium
             (and, if applicable, its role).
         """
-        return self.mapping[TOP_LEVEL_KEY]["contents_types"][contents.name]
+        return self.mapping[TOP_LEVEL_KEY][CONTENTS_TYPES_KEY][contents.name]
 
     def convert_attribute(self, attr_name: str):
         """Look up the WaTr property entry for a PyPES node/connection attribute.
@@ -259,12 +307,19 @@ class PyPES2WaTr:
             The mapping-file entry describing the corresponding WaTr
             property.
         is_quant_kind : bool
-            True if the property is a quantifiable (QUDT quantity kind)
-            property; False if it is an enumerable property.
+            True if the entry's `kind` is `"QuantityKind"`; False if it is
+            `"EnumerationKind"`.
+
+        Raises
+        ------
+        ValueError
+            If the entry's `kind` is neither `"QuantityKind"` nor
+            `"EnumerationKind"`.
         """
-        prop_dict = self.mapping[TOP_LEVEL_KEY]["attributes"][attr_name]
-        is_quant_kind = ENUM_KIND_STR not in prop_dict[NAME_KEY]
-        return prop_dict, is_quant_kind
+        prop_dict = self.mapping[TOP_LEVEL_KEY][ATTRIBUTES_KEY][attr_name]
+        if prop_dict[KIND_KEY] not in (QUANT_KIND_STR, ENUM_KIND_STR):
+            raise ValueError(f"Unknown kind {prop_dict[KIND_KEY]!r} for attribute {attr_name}")
+        return prop_dict, prop_dict[KIND_KEY] == QUANT_KIND_STR
 
     def convert_tag_type(self, tag_type: TagType):
         """Look up the WaTr property entry for a PyPES tag type.
@@ -280,12 +335,19 @@ class PyPES2WaTr:
             The mapping-file entry describing the corresponding WaTr
             observable property.
         is_quant_kind : bool
-            True if the property is a quantifiable (QUDT quantity kind)
-            property; False if it is an enumerable property.
+            True if the entry's `kind` is `"QuantityKind"`; False if it is
+            `"EnumerationKind"`.
+
+        Raises
+        ------
+        ValueError
+            If the entry's `kind` is neither `"QuantityKind"` nor
+            `"EnumerationKind"`.
         """
-        prop_dict = self.mapping[TOP_LEVEL_KEY]["tag_types"][tag_type.name]
-        is_quant_kind = ENUM_KIND_STR not in prop_dict[NAME_KEY]
-        return prop_dict, is_quant_kind
+        prop_dict = self.mapping[TOP_LEVEL_KEY][TAG_TYPES_KEY][tag_type.name]
+        if prop_dict[KIND_KEY] not in (QUANT_KIND_STR, ENUM_KIND_STR):
+            raise ValueError(f"Unknown kind {prop_dict[KIND_KEY]!r} for tag type {tag_type.name}")
+        return prop_dict, prop_dict[KIND_KEY] == QUANT_KIND_STR
 
     def generate_conn_point_name(self, name: str):
         """Disambiguate a connection-point name against already-used names.
@@ -293,10 +355,10 @@ class PyPES2WaTr:
         A node that participates in more than one connection will request
         the same base name (e.g. `"ERI-cp-1"`) more than once - once per
         connection it is a source or destination of. When that happens this
-        method appends/increments a numeric suffix (`-cp-2`, `-cp-3`, ...)
-        so every connection point still gets a unique name; it does not
-        change how many connection points get created; every connection
-        still contributes exactly two.
+        method increments the numeric suffix (`-cp-2`, `-cp-3`, ...) so
+        every connection point still gets a unique name; it does not change
+        how many connection points get created; every connection still
+        contributes exactly two.
 
         Parameters
         ----------
@@ -308,12 +370,17 @@ class PyPES2WaTr:
         str
             `name` unchanged if it is not already taken, otherwise `name`
             with its numeric suffix incremented until it is unique.
+
+        Raises
+        ------
+        ValueError
+            If `name` is taken and does not end in a numeric suffix.
         """
         if name not in self.conn_point_dict:
             return name
 
         prefix, _, suffix = name.rpartition("-")
-        next_num = int(suffix) + 1 if suffix.isdigit() else 2
+        next_num = int(suffix) + 1
         while f"{prefix}-{next_num}" in self.conn_point_dict:
             next_num += 1
         return f"{prefix}-{next_num}"
@@ -322,10 +389,6 @@ class PyPES2WaTr:
         self, subject: SemanticTerm, medium_dict: dict, medium_predicate: str
     ):
         """Attach a medium relation (and role relation, if any) to a term.
-
-        # TODO: should Role be applied elsewhere, or does it make sense to
-        # attach it directly to the property/connection point/connection as
-        # done here?
 
         Parameters
         ----------
@@ -342,13 +405,13 @@ class PyPES2WaTr:
         medium = self._term(medium_dict)
         self._add_relation(subject, S223_URI, medium_predicate, medium)
 
-        role = medium_dict.get("role")
+        role = medium_dict.get(ROLE_KEY)
         if role:
             self._add_relation(
                 subject,
                 S223_URI,
-                "hasRole",
-                self.model.term(medium_dict["role-uri"], role),
+                HAS_ROLE_PRED,
+                self.model.term(medium_dict[ROLE_URI_KEY], role),
             )
 
     def create_conn_points(self, conn: connection.Connection):
@@ -367,32 +430,33 @@ class PyPES2WaTr:
         dest_name : str
             Name of the inlet connection point created on `conn.destination`.
         """
-        source_name = self.generate_conn_point_name(f"{conn.source.id}-cp-1")
-        dest_name = self.generate_conn_point_name(f"{conn.destination.id}-cp-1")
+        source_name = self.generate_conn_point_name(f"{conn.source.id}{CONN_POINT_STR}1")
+        dest_name = self.generate_conn_point_name(f"{conn.destination.id}{CONN_POINT_STR}1")
         source = self._local(source_name)
         dest = self._local(dest_name)
         conn_term = self._local(self._sanitize_id(conn.id))
         medium_dict = self.convert_contents(conn.contents)
 
-        self.model.add_type(source, self.model.term(S223_URI, "OutletConnectionPoint"))
-        self.model.add_type(dest, self.model.term(S223_URI, "InletConnectionPoint"))
+        self.model.add_type(source, self.model.term(S223_URI, OUTLET_CONN_POINT_CLASS))
+        self.model.add_type(dest, self.model.term(S223_URI, INLET_CONN_POINT_CLASS))
         self._add_relation(
             source,
             S223_URI,
-            "isConnectionPointOf",
+            IS_CONN_POINT_OF_PRED,
             self._local(self._sanitize_id(conn.source.id)),
         )
         self._add_relation(
             dest,
             S223_URI,
-            "isConnectionPointOf",
+            IS_CONN_POINT_OF_PRED,
             self._local(self._sanitize_id(conn.destination.id)),
         )
-        self._add_relation(source, S223_URI, "connectsThrough", conn_term)
-        self._add_relation(dest, S223_URI, "connectsThrough", conn_term)
-        self._add_medium_and_role(source, medium_dict, "hasMedium")
-        self._add_medium_and_role(dest, medium_dict, "hasMedium")
+        self._add_relation(source, S223_URI, CONNECTS_THROUGH_PRED, conn_term)
+        self._add_relation(dest, S223_URI, CONNECTS_THROUGH_PRED, conn_term)
+        self._add_medium_and_role(source, medium_dict, HAS_MEDIUM_PRED)
+        self._add_medium_and_role(dest, medium_dict, HAS_MEDIUM_PRED)
 
+        # NOTE: ignoring connectsAt and connectsThrough as those can be inferred
         self.conn_point_dict[source_name] = {
             "node": conn.source.id,
             "connection": conn.id,
@@ -415,7 +479,8 @@ class PyPES2WaTr:
         value : pint.Quantity, float, str, or None
             Value of the attribute. If it has `.units`/`.magnitude`
             attributes (i.e. it is a Pint quantity), the units are looked up
-            via `convert_units` and the magnitude is used as the value.
+            via `convert_units` and the magnitude is used as the value. If
+            None, no property is created.
         parent_id : str
             ID of the PyPES node or connection this attribute belongs to.
         contents : pype_schema.utils.ContentsType, optional
@@ -426,61 +491,63 @@ class PyPES2WaTr:
 
         Returns
         -------
-        dict
-            The entry recorded in `self.property_dict` for this attribute.
+        dict or None
+            The entry recorded in `self.property_dict` for this attribute,
+            or None if `value` is None.
         """
+        # there is no reason to add a property without data to the graph
+        if value is None:
+            return None
+
         prop_id = self._sanitize_id(parent_id) + attr_name
         # TODO: handle dictionary attributes
-        unit_dict = {}
-        converted_units = None
-        unit_uri = None
-
-        try:
+        try:  # if Pint object, there will be units and magnitude fields
             unit_dict = self.convert_units(value.units)
             converted_units = unit_dict.get(NAME_KEY)
             unit_uri = unit_dict.get(URI_KEY)
             value = value.magnitude
-        except AttributeError:
-            pass
+        except AttributeError:  # if no `units` attribute, assume value is directly stored
+            unit_dict, converted_units, unit_uri = {}, None, None
 
         prop_data, is_quant_kind = self.convert_attribute(attr_name)
-        prop_type = "QuantifiableProperty" if is_quant_kind else "EnumerableProperty"
+        prop_type = QUANT_PROP_CLASS if is_quant_kind else ENUM_PROP_CLASS
         prop_term = self._local(prop_id)
 
         self.model.add_type(prop_term, self.model.term(S223_URI, prop_type))
-        if value is not None:
-            self.model.add(
-                prop_term,
-                self._predicate(S223_URI, "hasValue"),
-                self.model.literal(value),
-            )
+        self.model.add(
+            prop_term,
+            self._predicate(S223_URI, HAS_VALUE_PRED),
+            self.model.literal(value),
+        )
 
+        # contents may be impossible to automatically discern for nodes, hence this check
         if contents is not None:
+            # TODO: should Role be applied elsewhere or does it make sense in the property itself?
             medium_dict = self.convert_contents(contents)
             medium_name = medium_dict[NAME_KEY]
             medium_uri = medium_dict[URI_KEY]
-            self._add_medium_and_role(prop_term, medium_dict, "ofMedium")
-            role_name = medium_dict.get("role")
-            role_uri = medium_dict.get("role-uri") if role_name is not None else None
+            self._add_medium_and_role(prop_term, medium_dict, OF_MEDIUM_PRED)
+            role_name = medium_dict.get(ROLE_KEY)
+            role_uri = medium_dict.get(ROLE_URI_KEY) if role_name is not None else None
         else:
             medium_name, medium_uri, role_name, role_uri = None, None, None, None
 
         if is_quant_kind:
             self._add_relation(
-                prop_term, QUDT_URI, "hasQuantityKind", self._term(prop_data)
+                prop_term, QUDT_URI, HAS_QUANT_KIND_PRED, self._term(prop_data)
             )
         else:
             self._add_relation(
-                prop_term, S223_URI, "hasEnumerationKind", self._term(prop_data)
+                prop_term, S223_URI, HAS_ENUM_KIND_PRED, self._term(prop_data)
             )
 
-        substance_name = prop_data.get("substance")
-        substance_uri = prop_data.get("substance-uri")
+        substance_name = prop_data.get(SUBSTANCE_KEY)
+        substance_uri = prop_data.get(SUBSTANCE_URI_KEY)
         if substance_name:
             self._add_relation(
                 prop_term,
                 S223_URI,
-                "ofSubstance",
+                OF_SUBSTANCE_PRED,
                 self.model.term(substance_uri or S223_URI, substance_name),
             )
 
@@ -488,7 +555,7 @@ class PyPES2WaTr:
             self._add_relation(
                 prop_term,
                 S223_URI,
-                "hasUnit",
+                HAS_UNIT_PRED,
                 self.model.term(unit_uri, converted_units),
             )
 
@@ -526,55 +593,77 @@ class PyPES2WaTr:
         -------
         dict
             The entry recorded in `self.property_dict` for this tag.
+
+        Raises
+        ------
+        ValueError
+            If `tag` has no contents but its type is not one of PyPES's
+            `CONTENTLESS_TYPES`.
         """
+        # Tag attributes:
+        # - id : str
+        # - units : pint.Unit
+        # - tag_type : TagType
+        # - source_unit_id : int or str
+        # - dest_unit_id : int or str
+        # - parent_id : str
+        # - totalized : bool
+        # - contents : ContentsType
+        # - manufacturer : str
+        # - measure_freq : pint.Quantity
+        # - report_freq : pint.Quantity
+        # - downsample_method : DownsampleType
+        # - calibration : Logbook
+        # NOTE: totalized, manufacturer, measure_freq, report_freq, downsample_method,
+        # and calibration are all ignored
+
+        # PyPES only allows the tag types in `CONTENTLESS_TYPES` to have no contents
+        if tag.contents is None and tag.tag_type not in CONTENTLESS_TYPES:
+            raise ValueError(
+                f"Tag {tag.id} has no contents, but {tag.tag_type.name} tags must have contents"
+            )
+
         tag_id = self._sanitize_id(tag.id)
         parent_id = self._sanitize_id(tag.parent_id)
-        unit_dict = {}
-        converted_units = None
-        unit_uri = None
-
-        try:
+        if tag.units is None:  # unitless tags (e.g., RunStatus) have no units to convert
+            unit_dict, converted_units, unit_uri = {}, None, None
+        else:
             unit_dict = self.convert_units(tag.units)
             converted_units = unit_dict.get(NAME_KEY)
             unit_uri = unit_dict.get(URI_KEY)
-        except AttributeError:
-            pass
 
         prop_data, is_quant_kind = self.convert_tag_type(tag.tag_type)
-        prop_type = (
-            "QuantifiableObservableProperty"
-            if is_quant_kind
-            else "EnumeratedObservableProperty"
-        )
+        prop_type = QUANT_OBS_PROP_CLASS if is_quant_kind else ENUM_OBS_PROP_CLASS
         tag_term = self._local(tag_id)
 
         self.model.add_type(tag_term, self.model.term(S223_URI, prop_type))
         if tag.contents:
+            # TODO: should Role be applied elsewhere or does it make sense in the property itself?
             medium_dict = self.convert_contents(tag.contents)
             medium_name = medium_dict[NAME_KEY]
             medium_uri = medium_dict[URI_KEY]
-            self._add_medium_and_role(tag_term, medium_dict, "ofMedium")
-            role_name = medium_dict.get("role")
-            role_uri = medium_dict.get("role-uri") if role_name is not None else None
+            self._add_medium_and_role(tag_term, medium_dict, OF_MEDIUM_PRED)
+            role_name = medium_dict.get(ROLE_KEY)
+            role_uri = medium_dict.get(ROLE_URI_KEY) if role_name is not None else None
         else:
             medium_name, medium_uri, role_name, role_uri = None, None, None, None
 
         if is_quant_kind:
             self._add_relation(
-                tag_term, QUDT_URI, "hasQuantityKind", self._term(prop_data)
+                tag_term, QUDT_URI, HAS_QUANT_KIND_PRED, self._term(prop_data)
             )
         else:
             self._add_relation(
-                tag_term, S223_URI, "hasEnumerationKind", self._term(prop_data)
+                tag_term, S223_URI, HAS_ENUM_KIND_PRED, self._term(prop_data)
             )
 
-        substance_name = prop_data.get("substance")
-        substance_uri = prop_data.get("substance-uri")
+        substance_name = prop_data.get(SUBSTANCE_KEY)
+        substance_uri = prop_data.get(SUBSTANCE_URI_KEY)
         if substance_name:
             self._add_relation(
                 tag_term,
                 S223_URI,
-                "ofSubstance",
+                OF_SUBSTANCE_PRED,
                 self.model.term(substance_uri or S223_URI, substance_name),
             )
 
@@ -582,7 +671,7 @@ class PyPES2WaTr:
             self._add_relation(
                 tag_term,
                 S223_URI,
-                "hasUnit",
+                HAS_UNIT_PRED,
                 self.model.term(unit_uri, converted_units),
             )
 
@@ -638,7 +727,7 @@ class PyPES2WaTr:
             its properties via `_properties_for_parent`.
         """
         for prop_term in self._properties_for_parent(parent_id):
-            self._add_relation(parent, S223_URI, "hasProperty", prop_term)
+            self._add_relation(parent, S223_URI, HAS_PROPERTY_PRED, prop_term)
 
     def translate_node(self, node: Node):
         """Convert a PyPES node into its WaTr type, connections, and properties.
@@ -665,7 +754,7 @@ class PyPES2WaTr:
             list it as a source or destination.
         """
         pypes_class = type(node).__name__
-        node_data = self.mapping[TOP_LEVEL_KEY]["nodes"][pypes_class]
+        node_data = self.mapping[TOP_LEVEL_KEY][NODES_KEY][pypes_class]
         node_id = self._sanitize_id(node.id)
         node_term = self._local(node_id)
 
@@ -674,7 +763,7 @@ class PyPES2WaTr:
             self._add_relation(
                 node_term,
                 WATR_URI,
-                "hasProcess",
+                HAS_PROCESS_PRED,
                 self.model.term(WATR_URI, node_data[PROCESS_KEY]),
             )
 
@@ -692,10 +781,12 @@ class PyPES2WaTr:
                 conn_point_list.append(conn_data["dest_conn_point"])
                 conn_from_list.append(conn_data["source"])
                 conn_point_in = conn_data["dest_conn_point"]
+                # node_str += f"    {S223_URI}:connectedFrom {self.local_prefix}:{self.conn_dict[conn_id]["source"]} ;\n"
             elif conn_data["source"] == node.id:
                 conn_point_list.append(conn_data["source_conn_point"])
                 conn_to_list.append(conn_data["destination"])
                 conn_point_out = conn_data["source_conn_point"]
+                # node_str += f"    {S223_URI}:connectedTo {self.local_prefix}:{self.conn_dict[conn_id]["destination"]} ;\n"
             else:
                 raise ValueError(
                     "Connection `source` or `destination` must match node `id`"
@@ -705,17 +796,17 @@ class PyPES2WaTr:
             # TODO: is this `cnx` necessary? I saw it from the examples, but am not sure
             if conn_point_in and conn_point_out:
                 self._add_relation(
-                    node_term, S223_URI, "cnx", self._local(conn_point_in)
+                    node_term, S223_URI, CNX_PRED, self._local(conn_point_in)
                 )
                 self._add_relation(
-                    node_term, S223_URI, "cnx", self._local(conn_point_out)
+                    node_term, S223_URI, CNX_PRED, self._local(conn_point_out)
                 )
                 conn_point_in = None
                 conn_point_out = None
 
         for conn_point in conn_point_list:
             self._add_relation(
-                node_term, S223_URI, "hasConnectionPoint", self._local(conn_point)
+                node_term, S223_URI, HAS_CONN_POINT_PRED, self._local(conn_point)
             )
 
         media_added = set()
@@ -724,21 +815,24 @@ class PyPES2WaTr:
             medium_name = medium_dict[NAME_KEY]
             if medium_name not in media_added:
                 self._add_relation(
-                    node_term, S223_URI, "hasMedium", self._term(medium_dict)
+                    node_term, S223_URI, HAS_MEDIUM_PRED, self._term(medium_dict)
                 )
                 media_added.add(medium_name)
 
-        for prop_name, prop_val in node.__dict__.items():
+        for prop_name, prop_val in node.__dict__.items():  # get all attributes
             if prop_name in CUSTOM_HANDLED_ATTRIBUTES or prop_name.startswith("_"):
-                continue
-            if prop_name in NOT_YET_IMPLEMENTED_ATTRIBUTES:
+                # ignore internal attributes starting with `_`
+                # and those handled elsewhere (`CUSTOM_HANDLED_ATTRIBUTES`)
+                pass
+            elif prop_name in NOT_YET_IMPLEMENTED_ATTRIBUTES:
                 warnings.warn(
                     f"The attribute {prop_name} for node {node_id} is not yet implemented in the WaTr codec!",
                     NotImplementedWarning,
                 )
-                continue
-            # TODO: try to automatically determine contents
-            self.translate_attribute(prop_name, prop_val, node_id, contents=None)
+            else:
+                # create property and add to property_dict
+                # TODO: try to automatically determine contents
+                self.translate_attribute(prop_name, prop_val, node_id, contents=None)
 
         self._add_parent_properties(node_term, node_id)
         # TODO: add more attributes to below dictionary
@@ -769,40 +863,46 @@ class PyPES2WaTr:
         """
         pypes_class = type(conn).__name__
         conn_id = self._sanitize_id(conn.id)
-        conn_data = self.mapping[TOP_LEVEL_KEY]["connections"][pypes_class]
+        conn_data = self.mapping[TOP_LEVEL_KEY][CONNECTIONS_KEY][pypes_class]
         conn_term = self._local(conn_id)
 
+        # This dictionary enables us to add the correct connections to each node
         self.node_to_conn_ids.setdefault(conn.source.id, []).append(conn.id)
         self.node_to_conn_ids.setdefault(conn.destination.id, []).append(conn.id)
 
         self.model.add_type(conn_term, self._term(conn_data))
         source_conn_point, dest_conn_point = self.create_conn_points(conn)
-        self._add_relation(conn_term, S223_URI, "cnx", self._local(source_conn_point))
-        self._add_relation(conn_term, S223_URI, "cnx", self._local(dest_conn_point))
+        self._add_relation(conn_term, S223_URI, CNX_PRED, self._local(source_conn_point))
+        self._add_relation(conn_term, S223_URI, CNX_PRED, self._local(dest_conn_point))
 
+        # TODO: should Role be applied elsewhere or does it make sense in the connection?
         medium_dict = self.convert_contents(conn.contents)
         medium_name = medium_dict[NAME_KEY]
         medium_uri = medium_dict[URI_KEY]
-        self._add_medium_and_role(conn_term, medium_dict, "hasMedium")
-        role_name = medium_dict.get("role")
-        role_uri = medium_dict.get("role-uri") if role_name is not None else None
+        self._add_medium_and_role(conn_term, medium_dict, HAS_MEDIUM_PRED)
+        role_name = medium_dict.get(ROLE_KEY)
+        role_uri = medium_dict.get(ROLE_URI_KEY) if role_name is not None else None
 
         # TODO: add logic to handle source and destination unit IDs
         # TODO: add logic for bidirectional connections
-        for prop_name, prop_val in conn.__dict__.items():
+        for prop_name, prop_val in conn.__dict__.items():  # get all attributes
             if prop_name in CUSTOM_HANDLED_ATTRIBUTES or prop_name.startswith("_"):
                 # TODO: add logic for dictionary attributes (like flow_rate and gen_capacity)
-                continue
-            if prop_name in NOT_YET_IMPLEMENTED_ATTRIBUTES:
+                # ignore internal attributes starting with `_`
+                # and those handled elsewhere (`CUSTOM_HANDLED_ATTRIBUTES`)
+                pass
+            elif prop_name in NOT_YET_IMPLEMENTED_ATTRIBUTES:
                 warnings.warn(
                     f"The attribute {prop_name} for connection {conn_id} is not yet implemented in the WaTr codec!",
                     NotImplementedWarning,
                 )
-                continue
-            self.translate_attribute(
-                prop_name, prop_val, conn_id, contents=conn.contents
-            )
+            else:
+                # create property and add to property_dict
+                self.translate_attribute(
+                    prop_name, prop_val, conn_id, contents=conn.contents
+                )
 
+        # TODO: check that hasProperty can have unlimited entries
         self._add_parent_properties(conn_term, conn_id)
         self.conn_dict[conn.id] = {
             "connection": conn_data[NAME_KEY],
@@ -818,6 +918,7 @@ class PyPES2WaTr:
         }
         return self.conn_dict[conn.id]
 
+    # TODO: add contains and isContained logic to network hierarchy
     def translate_network(self, network: Network):
         """Recursively translate every tag, connection, and node in a network.
 
@@ -831,9 +932,9 @@ class PyPES2WaTr:
         """
         for tag in network.get_all_tags():
             if isinstance(tag, VirtualTag):
-                # TODO: implement VirtualTag to Acquirium soft sensor translator
-                continue
-            self.translate_tag(tag)
+                pass  # TODO: implement VirtualTag to Acquirium soft sensor translator
+            else:
+                self.translate_tag(tag)
 
         for conn in network.get_all_connections():
             self.translate_connection(conn)
@@ -847,8 +948,6 @@ class PyPES2WaTr:
         if self.world.id != network.id:
             self.translate_node(network)
 
-        # TODO: add contains and isContained logic to network hierarchy
-
     def to_graph(self):
         """Translate the facility (if not already done) and return its graph.
 
@@ -860,7 +959,7 @@ class PyPES2WaTr:
             re-running the translation.
         """
         if not self._translated:
-            self.model.add_type(self._local(), self.model.term(OWL_URI, "Ontology"))
+            self.model.add_type(self._local(), self.model.term(OWL_URI, ONTOLOGY_CLASS))
             self.translate_network(self.world)
             self._translated = True
         return self.model.graph

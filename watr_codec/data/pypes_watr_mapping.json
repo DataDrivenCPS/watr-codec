@@ -169,41 +169,49 @@
             "Flow": {
                 "name": "VolumeFlowRate",
                 "uri": "qudtqk",
+                "kind": "QuantityKind",
                 "reference": "http://qudt.org/vocab/quantitykind/VolumeFlowRate"
             },
             "Volume": {
                 "name": "Volume",
                 "uri": "qudtqk",
+                "kind": "QuantityKind",
                 "reference": "http://qudt.org/vocab/quantitykind/Volume"
             },
             "Level": {
                 "name": "LiquidLevel",
                 "uri": "qudtqk",
+                "kind": "QuantityKind",
                 "reference": "http://qudt.org/vocab/quantitykind/LiquidLevel"
             },
             "Pressure": {
                 "name": "Pressure",
                 "uri": "qudtqk",
+                "kind": "QuantityKind",
                 "reference": "http://qudt.org/vocab/quantitykind/Pressure"
             },
             "Temperature": {
-                "name": "Pressure",
+                "name": "Temperature",
                 "uri": "qudtqk",
+                "kind": "QuantityKind",
                 "reference": "http://qudt.org/vocab/quantitykind/Temperature"
             },
             "RunTime": {
                 "name": "Time",
                 "uri": "qudtqk",
+                "kind": "QuantityKind",
                 "reference": "http://qudt.org/vocab/quantitykind/Time"
             },
             "RunStatus": {
                 "name": "Binary-OnOff",
                 "uri": "s223",
+                "kind": "EnumerationKind",
                 "reference": "https://explore.open223.info/#s223:Binary-OnOff"
             },
             "TSS": {
                 "name": "Concentration",
                 "uri": "qudtqk",
+                "kind": "QuantityKind",
                 "reference": "http://qudt.org/vocab/quantitykind/Concentration",
                 "substance": "Constituent-SuspendedSolids",
                 "substance-uri": "watr",
@@ -212,6 +220,7 @@
             "VSS": {
                 "name": "Concentration",
                 "uri": "qudtqk",
+                "kind": "QuantityKind",
                 "reference": "http://qudt.org/vocab/quantitykind/Concentration",
                 "substance": "Solids-VolatileSuspendedSolids",
                 "substance-uri": "watr",
@@ -223,31 +232,37 @@
             "pH": {
                 "name": "Acidity",
                 "uri": "qudtqk",
+                "kind": "QuantityKind",
                 "reference": "https://qudt.org/vocab/quantitykind/Acidity"
             },
             "Conductivity": {
                 "name": "ElectricConductivity",
                 "uri": "qudtqk",
+                "kind": "QuantityKind",
                 "reference": "https://qudt.org/vocab/quantitykind/ElectricConductivity"
             },
             "Turbidity": {
                 "name": "Turbidity",
                 "uri": "qudtqk",
+                "kind": "QuantityKind",
                 "reference": "https://qudt.org/vocab/quantitykind/Turbidity"
             },
-            "Rotation":  {
+            "Rotation": {
                 "name": "RotationalFrequency",
                 "uri": "qudtqk",
+                "kind": "QuantityKind",
                 "reference": "https://qudt.org/vocab/quantitykind/RotationalFrequency"
             },
             "Efficiency": {
                 "name": "Efficiency",
                 "uri": "qudtqk",
+                "kind": "QuantityKind",
                 "reference": "https://qudt.org/vocab/quantitykind/Efficiency"
             },
             "StateOfCharge": {
                 "name": "StateOfCharge",
                 "uri": "qudtqk",
+                "kind": "QuantityKind",
                 "reference": "https://qudt.org/vocab/quantitykind/StateOfCharge"
             },
             "InFlow": {},
@@ -256,26 +271,31 @@
             "Speed": {
                 "name": "Speed",
                 "uri": "qudtqk",
+                "kind": "QuantityKind",
                 "reference": "https://qudt.org/vocab/quantitykind/Speed"
             },
             "Frequency": {
                 "name": "Frequency",
                 "uri": "qudtqk",
+                "kind": "QuantityKind",
                 "reference": "https://qudt.org/vocab/quantitykind/Frequency"
             },
             "Current": {
                 "name": "ElectricCurrent",
                 "uri": "qudtqk",
+                "kind": "QuantityKind",
                 "reference": "https://qudt.org/vocab/quantitykind/ElectricCurrent"
             },
             "Voltage": {
                 "name": "Voltage",
                 "uri": "qudtqk",
+                "kind": "QuantityKind",
                 "reference": "https://qudt.org/vocab/quantitykind/Voltage"
             },
             "Concentration": {
                 "name": "Concentration",
                 "uri": "qudtqk",
+                "kind": "QuantityKind",
                 "reference": "http://qudt.org/vocab/quantitykind/Concentration"
             },
             "SetPoint": {}
@@ -284,27 +304,32 @@
             "diameter": {
                 "name": "Diameter",
                 "uri": "qudtqk",
+                "kind": "QuantityKind",
                 "reference": "https://qudt.org/vocab/quantitykind/Diameter"
             },
             "elevation": {
                 "name": "Altitude",
                 "uri": "qudtqk",
+                "kind": "QuantityKind",
                 "reference": "https://qudt.org/vocab/quantitykind/Altitude"
             },
             "friction_coeff": {
                 "name": "FrictionCoefficient",
                 "uri": "qudtqk",
+                "kind": "QuantityKind",
                 "reference": "https://qudt.org/vocab/quantitykind/FrictionCoefficient"
             },
             "permeability": {
                 "name": "HydraulicPermeability",
                 "uri": "qudtqk",
+                "kind": "QuantityKind",
                 "reference": "https://qudt.org/vocab/quantitykind/HydraulicPermeability"
             },
             "selectivity": {},
             "volume": {
                 "name": "Volume",
                 "uri": "qudtqk",
+                "kind": "QuantityKind",
                 "reference": "https://qudt.org/vocab/quantitykind/Volume"
             }
         },
@@ -328,6 +353,11 @@
                 "name": "PSI",
                 "uri": "unit",
                 "reference": "https://qudt.org/vocab/unit/PSI"
+            },
+            "meter": {
+                "name": "M",
+                "uri": "unit",
+                "reference": "https://qudt.org/vocab/unit/M"
             },
             "NTU": {
                 "name": "NTU",

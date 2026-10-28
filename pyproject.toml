@@ -4,4 +4,19 @@ requires = ["setuptools", "wheel"]
 [project]
 name = "watr_codec"
 version = "0.1.0"
-dependencies = ["pype_schema>=0.7.0"]
+# plumb requires Python 3.12 or newer
+requires-python = ">=3.12"
+dependencies = [
+    # 0.8.0 renamed StaticMixer and Separator to StaticMixing and Separation
+    "pype_schema>=0.8.0",
+    "plumb-rdf>=0.1.0",
+    "rdflib>=7.6.0",
+]
+
+[project.optional-dependencies]
+# install with `pip install -e ".[test]"`
+test = ["pytest>=8.0"]
+
+[tool.setuptools.package-data]
+# include the mapping and example files when the package is installed
+"watr_codec.data" = ["*.json", "*.ttl"]

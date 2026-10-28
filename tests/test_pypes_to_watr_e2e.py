@@ -8,17 +8,23 @@ coverage lives in test_pypes_to_watr_unit.py.
 """
 
 import os
+import shutil
 import warnings
 
 import pytest
 from pype_schema.parse_json import JSONParser
 from rdflib import Graph, Namespace
+from rdflib.compare import graph_diff, to_isomorphic
 from rdflib.namespace import RDF
 
 from watr_codec.pypes_to_watr import NotImplementedWarning, PyPES2WaTr
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 DESAL_JSON_PATH = os.path.join(CURRENT_DIR, "..", "watr_codec", "data", "desalination.json")
+# The reviewed translation of desalination.json. After an intended change to
+# the output, regenerate it with `UPDATE_EXPECTED_TTL=1 pytest`, then review
+# its diff before committing.
+DESAL_EXPECTED_TTL_PATH = os.path.join(CURRENT_DIR, "desal_expected.ttl")
 
 LOCAL = Namespace("urn:ex/")
 S223 = Namespace("http://data.ashrae.org/standard223#")
@@ -27,11 +33,39 @@ QUDT = Namespace("http://qudt.org/schema/qudt/")
 QK = Namespace("http://qudt.org/vocab/quantitykind/")
 UNIT = Namespace("http://qudt.org/vocab/unit/")
 
-# Expected WaTr quantity kind + unit for every tag in desalination.json,
-# hand-verified against pypes_watr_mapping.json. These are independent of
-# PyPES2WaTr.convert_tag_type()/convert_units() (not derived by calling
-# them), so a bug in that conversion logic will actually cause a mismatch
-# here instead of the test just re-confirming its own inputs.
+# The expectations below are hand-verified against pypes_watr_mapping.json and
+# must cover every node, pipe, and tag in desalination.json (see
+# test_expectations_cover_the_whole_fixture). They are independent of
+# PyPES2WaTr's lookups (not derived by calling them), so a bug in that logic
+# will actually cause a mismatch here instead of the test just re-confirming
+# its own inputs.
+
+# Expected WaTr class and processes of every node.
+EXPECTED_NODE_TYPES = {
+    "Input": WATR["Tank"],
+    "HPPump": WATR["Pump"],
+    "SWRO": WATR["ReverseOsmosisMembrane"],
+    "ERI": WATR["Pump"],
+    "CirculationPump": WATR["Pump"],
+    "WasteWaterSump": WATR["Tank"],
+    "Output": WATR["Tank"],
+}
+EXPECTED_PROCESSES = {"SWRO": {WATR["Process-ReverseOsmosis"]}}
+
+# Expected medium and role (if any) of every pipe: Brine is WaTr's brine, and
+# ProductWater is 223P water in WaTr's permeate role.
+EXPECTED_PIPE_MEDIA = {
+    "InputToHPPump": (WATR["Water-Brine"], None),
+    "InputToERI": (WATR["Water-Brine"], None),
+    "HPPumpToSWRO": (WATR["Water-Brine"], None),
+    "ERIToCirculationPump": (WATR["Water-Brine"], None),
+    "ERIToWasewaterSump": (WATR["Water-Brine"], None),
+    "SWROToERI": (WATR["Water-Brine"], None),
+    "CirculationPumpToSWRO": (WATR["Water-Brine"], None),
+    "SWROToOutput": (S223["Fluid-Water"], WATR["Role-Permeate"]),
+}
+
+# Expected WaTr quantity kind + unit for every tag.
 # NOTE: the two pump-speed tags are typed Speed with Hz units in
 # desalination.json; Hz has the dimensions of a rotational speed, so they
 # translate as RotationalVelocity
@@ -46,17 +80,21 @@ EXPECTED_TAG_TRANSLATIONS = {
 }
 
 # NotImplementedWarning is expected for every one of these PyPES attributes
-# present on the desalination.json facility (pump_type/pump_curve on the
-# Pump nodes, area/selectivity/settling_time on the ROMembrane, and
-# heating_values/bidirectional on every Pipe).
+# that has data on the desalination.json facility (pump_type/pump_curve on
+# the Pump nodes, settling_time on the ROMembrane, and bidirectional on every
+# Pipe)...
 EXPECTED_NOT_IMPLEMENTED_ATTRIBUTES = {
     "pump_type",
     "pump_curve",
+    "settling_time",
+    "bidirectional",
+}
+# ...but not for those without data (area/selectivity on the ROMembrane are
+# None, and heating_values on every Pipe is (None, None)).
+NOT_IMPLEMENTED_ATTRIBUTES_WITHOUT_DATA = {
     "area",
     "selectivity",
-    "settling_time",
     "heating_values",
-    "bidirectional",
 }
 
 
@@ -88,6 +126,16 @@ def converter(desal_network):
         prefix `"dsl"`.
     """
     return PyPES2WaTr(desal_network, local_prefix="dsl")
+
+
+def test_expectations_cover_the_whole_fixture(desal_network):
+    """The hand-verified expectations must list every node, pipe, and tag in
+    desalination.json, so editing the fixture without updating them fails."""
+    assert set(EXPECTED_NODE_TYPES) == set(desal_network.nodes)
+    assert set(EXPECTED_PIPE_MEDIA) == set(desal_network.connections)
+    assert set(EXPECTED_TAG_TRANSLATIONS) == {
+        tag.id for tag in desal_network.get_all_tags(virtual=False, recurse=True)
+    }
 
 
 def test_desalination_facility_translates_into_a_consistent_graph(converter, desal_network):
@@ -146,8 +194,8 @@ def test_desalination_facility_conforms_to_watr_and_223p(converter):
 
 def test_desalination_ttl_export_matches_expected_entities(converter, desal_network, tmp_path):
     """Exporting to TTL should round-trip losslessly through rdflib, raise
-    the expected "not yet implemented" warnings, and produce specific
-    triples for every node type and every tag - not just a single example.
+    the expected "not yet implemented" warnings, and produce the expected
+    triples for every node, every pipe, and every tag - not just examples.
     """
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -159,20 +207,28 @@ def test_desalination_ttl_export_matches_expected_entities(converter, desal_netw
     )
     for attribute in EXPECTED_NOT_IMPLEMENTED_ATTRIBUTES:
         assert attribute in warning_text, f"expected a NotImplementedWarning mentioning {attribute!r}"
+    for attribute in NOT_IMPLEMENTED_ATTRIBUTES_WITHOUT_DATA:
+        assert attribute not in warning_text, f"{attribute!r} has no data, so it should not warn"
 
     assert outpath.exists()
     reparsed = Graph().parse(str(outpath), format="turtle")
     assert len(reparsed) == len(converter.to_graph())
 
-    # Node types, including a node whose class carries a process.
-    assert (LOCAL["HPPump"], RDF.type, WATR["Pump"]) in reparsed
-    assert (LOCAL["SWRO"], RDF.type, WATR["ReverseOsmosisMembrane"]) in reparsed
-    assert (LOCAL["SWRO"], WATR["hasProcess"], WATR["Process-ReverseOsmosis"]) in reparsed
-    assert (LOCAL["Output"], RDF.type, WATR["Tank"]) in reparsed
+    # Every node should be its expected WaTr class, with exactly its expected processes.
+    for node_id, node_class in EXPECTED_NODE_TYPES.items():
+        assert (LOCAL[node_id], RDF.type, node_class) in reparsed, node_id
+        processes = set(reparsed.objects(LOCAL[node_id], WATR["hasProcess"]))
+        assert processes == EXPECTED_PROCESSES.get(node_id, set()), node_id
 
-    # Every pipe in the facility should show up as an s223:Pipe.
-    pipe_count = sum(1 for _ in reparsed.triples((None, RDF.type, S223["Pipe"])))
-    assert pipe_count == len(desal_network.connections)
+    # Every pipe should be an s223:Pipe with its expected medium and role,
+    # leaving its source node and entering its destination node.
+    for conn_id, (medium, role) in EXPECTED_PIPE_MEDIA.items():
+        conn = desal_network.connections[conn_id]
+        assert (LOCAL[conn_id], RDF.type, S223["Pipe"]) in reparsed, conn_id
+        assert (LOCAL[conn_id], S223["hasMedium"], medium) in reparsed, conn_id
+        assert set(reparsed.objects(LOCAL[conn_id], S223["hasRole"])) == ({role} if role else set()), conn_id
+        assert (LOCAL[conn_id + "-out"], S223["isConnectionPointOf"], LOCAL[conn.source.id]) in reparsed, conn_id
+        assert (LOCAL[conn_id + "-in"], S223["isConnectionPointOf"], LOCAL[conn.destination.id]) in reparsed, conn_id
 
     # Every tag in the facility - not just one - should be a sensor whose
     # observed property carries its expected quantity kind and unit.
@@ -181,3 +237,31 @@ def test_desalination_ttl_export_matches_expected_entities(converter, desal_netw
         assert (LOCAL[tag_id], S223["observes"], value) in reparsed, tag_id
         assert (value, QUDT["hasQuantityKind"], QK[kind]) in reparsed, tag_id
         assert (value, QUDT["hasUnit"], UNIT[unit]) in reparsed, tag_id
+
+
+def test_desalination_output_matches_reviewed_translation(converter, tmp_path):
+    """The translated facility should be exactly the reviewed graph in
+    desal_expected.ttl, so any change to the codec's output is caught.
+
+    If that file is missing, or UPDATE_EXPECTED_TTL is set, it is written from
+    the current output instead and the test is skipped.
+    """
+    outpath = tmp_path / "desal.ttl"
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        converter.export_ttl(str(outpath))
+
+    if os.environ.get("UPDATE_EXPECTED_TTL") or not os.path.exists(DESAL_EXPECTED_TTL_PATH):
+        shutil.copyfile(outpath, DESAL_EXPECTED_TTL_PATH)
+        pytest.skip(f"wrote {DESAL_EXPECTED_TTL_PATH}; review it before committing")
+
+    # parse both files so each side goes through the same Turtle round trip
+    actual = to_isomorphic(Graph().parse(str(outpath), format="turtle"))
+    expected = to_isomorphic(Graph().parse(DESAL_EXPECTED_TTL_PATH, format="turtle"))
+    _, only_actual, only_expected = graph_diff(actual, expected)
+    assert actual == expected, (
+        "output differs from desal_expected.ttl (if the change is intended, rerun with "
+        "UPDATE_EXPECTED_TTL=1 and review the file's diff)\n"
+        f"new triples:\n{only_actual.serialize(format='nt')}\n"
+        f"missing triples:\n{only_expected.serialize(format='nt')}"
+    )

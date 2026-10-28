@@ -46,7 +46,7 @@
                 "uri": "watr",
                 "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/ontology/equipment.ttl"
             },
-            "StaticMixer": {
+            "StaticMixing": {
                 "name": "StaticMixer",
                 "uri": "watr",
                 "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/ontology/equipment.ttl"
@@ -140,7 +140,7 @@
                 "uri": "watr",
                 "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/ontology/equipment.ttl"
             },
-            "Separator": {
+            "Separation": {
                 "name": "SeparationTank",
                 "uri": "watr",
                 "process": "Process-Separation",
@@ -155,9 +155,9 @@
             },
             "Delivery": {},
             "Wire": {
-                "name": "Wire",
+                "name": "Conductor",
                 "uri": "s223",
-                "reference": "https://docs.brickschema.org/modeling/connections.html"
+                "reference": "https://explore.open223.info/#s223:Conductor"
             },
             "Wireless": {
                 "name": "EM",
@@ -222,9 +222,9 @@
                 "uri": "qudtqk",
                 "kind": "QuantityKind",
                 "reference": "http://qudt.org/vocab/quantitykind/MassConcentration",
-                "substance": "Solids-VolatileSuspendedSolids",
+                "substance": "Constituent-VolatileSuspendedSolids",
                 "substance-uri": "watr",
-                "substance-reference": ""
+                "substance-reference": "https://github.com/DataDrivenCPS/watr-codec/blob/main/watr_codec/data/watr_extensions.ttl"
             },
             "TDS": {
                 "name": "MassConcentration",
@@ -440,6 +440,11 @@
                 "name": "Fluid-Oil",
                 "uri": "s223",
                 "reference": "https://explore.open223.info/#s223:Fluid-Oil"
+            },
+            "Electricity": {
+                "name": "Constituent-Electricity",
+                "uri": "s223",
+                "reference": "https://explore.open223.info/#s223:Constituent-Electricity"
             }
         },
         "units": {

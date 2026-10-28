@@ -1,0 +1,22 @@
+# WaTr terms the codec needs that the WaTr ontology does not define yet.
+#
+# Each term follows the WaTr pattern for enumeration kinds: a class that is
+# also an instance of itself, placed in the hierarchy with rdfs:subClassOf.
+# The codec turns each one into a plumb enumeration value whose parents are
+# its superclasses, and adds the definition of any term it uses to the graphs
+# it produces (and to the shapes it validates them against).
+#
+# Once a term is added to https://github.com/DataDrivenCPS/water-ontology and
+# plumb is regenerated from it, delete the term here.
+
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix watr: <https://watermetadata.org/ontology/watr#> .
+
+watr:Constituent-VolatileSuspendedSolids a sh:NodeShape,
+        watr:Class,
+        watr:Constituent-VolatileSuspendedSolids ;
+    rdfs:label "Volatile Suspended Solids" ;
+    rdfs:comment "The organic fraction of the suspended solids in a treatment medium, measured as the mass of suspended solids lost on ignition. Volatile suspended solids are both organic solids and suspended solids." ;
+    rdfs:subClassOf watr:Constituent-OrganicSolids,
+        watr:Constituent-SuspendedSolids .

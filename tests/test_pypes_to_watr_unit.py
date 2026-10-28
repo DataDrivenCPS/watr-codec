@@ -8,21 +8,25 @@ end-to-end tests that exercise the full desalination.json pipeline live in
 test_pypes_to_watr_e2e.py.
 """
 
+import json
+import os
 import warnings
 
 import pytest
 from rdflib import Graph, Namespace
-from rdflib.namespace import RDF
+from rdflib.namespace import RDF, RDFS
 
 import plumb.brick as brick
 import plumb.watr as watr
-from pype_schema.connection import Pipe
-from pype_schema.node import Digestion, Junction, Network, Pump, Tank
+import pype_schema.connection as pypes_connection
+import pype_schema.node as pypes_node
+from pype_schema.connection import Connection, Pipe, Wire
+from pype_schema.node import Battery, Digestion, Junction, Network, Node, Pump, Tank
 from pype_schema.tag import Tag, TagType
 from pype_schema.units import u
 from pype_schema.utils import ContentsType, DigesterType, PumpType, parse_quantity, parse_units
 
-from watr_codec.pypes_to_watr import NotImplementedWarning, PyPES2WaTr, UnitConversionWarning
+from watr_codec.pypes_to_watr import WATR_CODEC_DIR, NotImplementedWarning, PyPES2WaTr, UnitConversionWarning
 
 LOCAL = Namespace("urn:ex/")
 S223 = Namespace("http://data.ashrae.org/standard223#")
@@ -32,6 +36,23 @@ QK = Namespace("http://qudt.org/vocab/quantitykind/")
 UNIT = Namespace("http://qudt.org/vocab/unit/")
 REC = Namespace("https://w3id.org/rec#")
 BRICK = Namespace("https://brickschema.org/schema/Brick#")
+
+with open(os.path.join(WATR_CODEC_DIR, "data", "pypes_watr_mapping.json"), encoding="utf-8") as file:
+    MAPPING = json.load(file)["PyPES2WaTr"]
+
+# Every non-placeholder node and connection entry. PRV is mapped to the 223P
+# class it should be, which plumb does not have yet; the strict xfail flags
+# this test as soon as plumb adds it.
+MAPPED_CLASSES = [
+    pytest.param(
+        section,
+        key,
+        marks=pytest.mark.xfail(strict=True, reason="plumb has no PressureReducingValve class") if key == "PRV" else (),
+    )
+    for section in ("nodes", "connections")
+    for key, data in MAPPING[section].items()
+    if data
+]
 
 
 # --------- Fixtures ---------
@@ -276,6 +297,62 @@ class TestClassLookup:
             converter._class(converter.mapping["PyPES2WaTr"]["nodes"]["PRV"])
 
 
+# --------- mapping file ---------
+class TestMappingFile:
+    """Tests that `pypes_watr_mapping.json` matches pype_schema and plumb."""
+
+    def test_every_pypes_node_and_connection_class_is_mapped(self):
+        """Every pype_schema node and connection class should have an entry, so a
+        class renamed in pype_schema (e.g. StaticMixer to StaticMixing) is caught."""
+        node_classes = {
+            cls.__name__ for cls in vars(pypes_node).values()
+            if isinstance(cls, type) and issubclass(cls, Node) and cls is not Node
+        }
+        connection_classes = {
+            cls.__name__ for cls in vars(pypes_connection).values()
+            if isinstance(cls, type) and issubclass(cls, Connection) and cls is not Connection
+        }
+        assert node_classes - set(MAPPING["nodes"]) == set()
+        assert connection_classes - set(MAPPING["connections"]) == set()
+
+    @pytest.mark.parametrize("section, key", MAPPED_CLASSES)
+    def test_mapped_class_and_process_exist_in_plumb(self, converter, section, key):
+        """Every class (and process) in the mapping file should be one plumb has."""
+        data = MAPPING[section][key]
+        converter._class(data)
+        if data.get("process"):
+            assert hasattr(watr, converter._python_name(data["process"]))
+
+    def test_mapped_enumeration_values_exist(self, converter):
+        """Every medium, role, substance, digester type, and enumeration kind should
+        be a WaTr or 223P value, or one of the codec's own (watr_extensions.ttl)."""
+        names = [entry["name"] for entry in MAPPING["contents_types"].values()]
+        names += [entry["role"] for entry in MAPPING["contents_types"].values() if entry.get("role")]
+        names += [entry["name"] for entry in MAPPING["digester_types"].values()]
+        for entry in [*MAPPING["tag_types"].values(), *MAPPING["attributes"].values()]:
+            if entry.get("kind") == "EnumerationKind":
+                names.append(entry["name"])
+            if entry.get("substance"):
+                names.append(entry["substance"])
+        for name in names:
+            converter._enum_value(name)  # raises KeyError naming any missing value
+
+    def test_mapped_quantity_kinds_and_units_exist(self, converter):
+        """Every quantity kind and unit in the mapping file should be one plumb has."""
+        entries = [entry for entry in [*MAPPING["tag_types"].values(), *MAPPING["attributes"].values()] if entry]
+        entries += [option for entry in entries for option in entry.get("by_dimensionality", {}).values()]
+        for entry in entries:
+            if entry["kind"] == "QuantityKind":
+                converter._quantity_kind(entry)
+        for unit_dict in MAPPING["units"].values():
+            converter._unit(unit_dict)
+
+    def test_unknown_enumeration_value_raises_key_error(self, converter):
+        """A name neither plumb nor watr_extensions.ttl defines should raise a clear KeyError."""
+        with pytest.raises(KeyError, match="Constituent-NotARealSubstance"):
+            converter._enum_value("Constituent-NotARealSubstance")
+
+
 # --------- translate_attribute ---------
 class TestTranslateAttribute:
     """Tests for `PyPES2WaTr.translate_attribute`."""
@@ -293,7 +370,16 @@ class TestTranslateAttribute:
     def test_plain_dimensional_value_raises_value_error(self, converter):
         """An elevation without units is incomplete, since 223P requires a unit."""
         tank = Tank("Tank1", ContentsType.Brine, ContentsType.Brine, elevation=12.5, volume=None)
-        with pytest.raises(ValueError, match="Tank1elevation"):
+        with pytest.raises(ValueError, match="Tank1elevation.*needs a unit"):
+            converter.translate_node(tank)
+
+    def test_units_of_the_wrong_dimensions_raise_plumbs_error(self, converter):
+        """An elevation in a flow unit should raise plumb's own error, not one
+        claiming the value has no units."""
+        tank = Tank(
+            "Tank1", ContentsType.Brine, ContentsType.Brine, elevation=u.Quantity(5.0, "gallon / minute"), volume=None
+        )
+        with pytest.raises(ValueError, match="Tank1elevation.*incompatible"):
             converter.translate_node(tank)
 
     def test_units_pype_schema_attaches_are_mapped(self, converter, source_tank, dest_tank, pipe):
@@ -367,6 +453,31 @@ class TestTranslateTag:
         assert (value, QUDT["hasQuantityKind"], QK["MassConcentration"]) in graph
         assert (value, S223["ofSubstance"], WATR["Constituent-DissolvedSolids"]) in graph
 
+    def test_vss_tag_adds_volatile_suspended_solids_substance(self, converter):
+        """VSS are solids that are both organic and suspended, so the codec's own
+        WaTr term for them (watr_extensions.ttl) is a subclass of both, and its
+        definition is added to the graph."""
+        tank = Tank("Tank1", ContentsType.Brine, ContentsType.Brine, elevation=None, volume=None)
+        tag = Tag("VSSTag", parse_units("mg/L"), TagType.VSS, "total", "total", "Tank1", contents=ContentsType.Brine)
+        translated(converter, tank, tags=[tag])
+        graph = converter.to_graph()
+        vss = WATR["Constituent-VolatileSuspendedSolids"]
+
+        assert (LOCAL["VSSTag-value"], S223["ofSubstance"], vss) in graph
+        assert set(graph.objects(vss, RDFS.subClassOf)) == {
+            WATR["Constituent-OrganicSolids"],
+            WATR["Constituent-SuspendedSolids"],
+        }
+
+    def test_unused_codec_terms_are_not_added_to_the_graph(self, converter):
+        """The codec's own WaTr terms should only be defined in graphs that use them."""
+        tank = Tank("Tank1", ContentsType.Brine, ContentsType.Brine, elevation=None, volume=None)
+        tag = Tag("TSSTag", parse_units("mg/L"), TagType.TSS, "total", "total", "Tank1", contents=ContentsType.Brine)
+        translated(converter, tank, tags=[tag])
+        graph = converter.to_graph()
+
+        assert not list(graph.triples((WATR["Constituent-VolatileSuspendedSolids"], None, None)))
+
     def test_rotational_speed_tag(self, converter):
         """A Speed tag in RPM should observe a rotational velocity."""
         tag = Tag("PumpSpeed", parse_units("RPM"), TagType.Speed, "total", "total", "Pump1", contents=ContentsType.Brine)
@@ -400,16 +511,21 @@ class TestTranslateTag:
         with pytest.raises(ValueError):
             converter.translate_tag(tag)
 
-    def test_tag_unit_without_qudt_equivalent_warns_and_has_no_unit(self, converter):
-        """An MGD tag's data can't be converted by the codec, so it warns and gets no unit."""
-        tag = Tag("PlantFlow", parse_units("MGD"), TagType.Flow, "total", "total", "Pump1", contents=ContentsType.Brine)
-        translated(converter, make_pump())
+    def test_mgd_flow_tag_is_a_flow_sensor_without_a_unit(self, converter, source_tank, dest_tank, pipe):
+        """An MGD tag's data can't be converted by the codec, so it warns and gets
+        no unit, but it is still a flow sensor on its pipe."""
+        tag = Tag("PlantFlow", parse_units("MGD"), TagType.Flow, "total", "total", "Pipe1", contents=ContentsType.Brine)
+        translated(converter, source_tank, dest_tank, connections=[pipe])
         with pytest.warns(UnitConversionWarning, match="PlantFlow"):
             converter.translate_tag(tag)
 
         graph = converter.model.graph()
-        value = LOCAL["PlantFlow-value"]
+        sensor, value = LOCAL["PlantFlow"], LOCAL["PlantFlow-value"]
+        assert (sensor, RDF.type, WATR["FlowSensor"]) in graph
+        assert (sensor, S223["hasObservationLocation"], LOCAL["Pipe1"]) in graph
+        assert (sensor, S223["observes"], value) in graph
         assert (value, QUDT["hasQuantityKind"], QK["VolumeFlowRate"]) in graph
+        assert (value, S223["ofMedium"], WATR["Water-Brine"]) in graph
         assert not list(graph.objects(value, QUDT["hasUnit"]))
 
 
@@ -451,6 +567,24 @@ class TestTranslateNode:
         assert (LOCAL["Digester1"], WATR["hasProcess"], WATR["Process-Digestion"]) in graph
         assert (LOCAL["Digester1"], S223["hasRole"], WATR["Role-Anaerobic"]) in graph
 
+    def test_digester_of_unknown_type_gets_no_role(self, converter):
+        """PyPES allows a digester with no digester_type, which should get no role."""
+        digester = Digestion(
+            "Digester1",
+            ContentsType.ThickenedSludgeBlend,
+            ContentsType.SludgeBlend,
+            min_flow=None,
+            max_flow=None,
+            design_flow=None,
+            num_units=1,
+            volume=None,
+            digester_type=None,
+        )
+        graph = translated(converter, digester)
+
+        assert (LOCAL["Digester1"], WATR["hasProcess"], WATR["Process-Digestion"]) in graph
+        assert not list(graph.objects(LOCAL["Digester1"], S223["hasRole"]))
+
 
 # --------- translate_connection ---------
 class TestTranslateConnection:
@@ -475,16 +609,29 @@ class TestTranslateConnection:
         assert (LOCAL["Pipe1"], S223["hasMedium"], S223["Fluid-Water"]) in graph
         assert (LOCAL["Pipe1"], S223["hasRole"], WATR["Role-Permeate"]) in graph
 
-    def test_not_yet_implemented_attributes_warn(self, converter, source_tank, dest_tank, pipe):
-        """heating_values and bidirectional should each raise a warning."""
+    def test_wire_is_an_electrical_conductor(self, converter):
+        """A PyPES Wire carries electricity, which 223P models as a Conductor."""
+        battery = Battery("Battery1", energy_capacity=None, charge_rate=None, discharge_rate=None, rte=None, leakage=None)
+        pump = make_pump()
+        wire = Wire("Wire1", ContentsType.Electricity, battery, pump)
+        graph = translated(converter, battery, pump, connections=[wire])
+
+        assert (LOCAL["Wire1"], RDF.type, S223["Conductor"]) in graph
+        assert (LOCAL["Wire1"], S223["hasMedium"], S223["Constituent-Electricity"]) in graph
+        assert (LOCAL["Wire1-out"], S223["isConnectionPointOf"], LOCAL["Battery1"]) in graph
+        assert (LOCAL["Wire1-in"], S223["isConnectionPointOf"], LOCAL["Pump1"]) in graph
+
+    def test_not_yet_implemented_attributes_warn_only_with_data(self, converter, source_tank, dest_tank, pipe):
+        """bidirectional (False) has data, so it should warn, but heating_values
+        of (None, None) has none, so it should not."""
         translated(converter, source_tank, dest_tank)
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             converter.translate_connection(pipe)
 
         messages = [str(w.message) for w in caught if issubclass(w.category, NotImplementedWarning)]
-        assert any("heating_values" in m for m in messages)
         assert any("bidirectional" in m for m in messages)
+        assert not any("heating_values" in m for m in messages)
 
     def test_node_in_several_connections_gets_a_point_for_each(self, converter, source_tank, dest_tank, pipe):
         """A node that is the source of two pipes should get two outlet points."""
@@ -584,6 +731,23 @@ class TestToGraphValidateAndExport:
     def test_validate_conforms(self, converter, small_world):
         """The translated model should conform to the WaTr and 223P shapes."""
         converter.world = small_world
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", NotImplementedWarning)
+            report = converter.validate()
+        assert report, str(report)
+
+    def test_validate_recognizes_the_codecs_own_watr_terms(self, converter, dest_tank):
+        """A VSS tag uses the codec's own WaTr term, which should validate like
+        the WaTr ontology's terms."""
+        vss_tag = Tag("VSSTag", parse_units("mg/L"), TagType.VSS, "total", "total", "Source", contents=ContentsType.Brine)
+        source = Tank(
+            "Source", ContentsType.Brine, ContentsType.Brine, elevation=None, volume=None, tags={"VSSTag": vss_tag}
+        )
+        pipe = Pipe("Pipe1", ContentsType.Brine, source, dest_tank, None, None, None)
+        converter.world = Network(
+            "World", ContentsType.Brine, ContentsType.Brine,
+            nodes={"Source": source, "Dest": dest_tank}, connections={"Pipe1": pipe},
+        )
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", NotImplementedWarning)
             report = converter.validate()

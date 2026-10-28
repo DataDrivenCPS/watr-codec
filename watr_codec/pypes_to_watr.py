@@ -6,16 +6,29 @@ import warnings
 import pint
 import plumb.brick as brick
 import plumb.watr as watr
-from plumb import Model, connect
+from plumb import EnumValue, Model, connect
+# plumb has no public way to validate against extra ontology terms (see `validate`)
+from plumb.core.validation import _package_shapes
 from plumb.qudt import quantity_kinds, units
 from plumb.watr import enums
 from pype_schema import connection, utils
 from pype_schema.node import Network, Node
 from pype_schema.tag import CONTENTLESS_TYPES, Tag, TagType, VirtualTag
+from rdflib import RDF, RDFS, Graph, URIRef
 
 
 # add this file path to dir so that data folder is always accessible
 WATR_CODEC_DIR = os.path.dirname(os.path.abspath(__file__))
+MAPPING_PATH = os.path.join(WATR_CODEC_DIR, "data", "pypes_watr_mapping.json")
+
+# WaTr terms the codec defines itself until the WaTr ontology does
+EXTENSIONS_PATH = os.path.join(WATR_CODEC_DIR, "data", "watr_extensions.ttl")
+WATR_CLASS = URIRef(watr.ONTOLOGY.iri + "#Class")
+
+# IRI prefix for the facility's own terms, unless the caller gives another
+DEFAULT_NAMESPACE = "urn:ex/"
+TURTLE_FORMAT = "turtle"
+FILE_ENCODING = "utf-8"
 
 # strings are stored as global variables to avoid hardcoding
 # keys of the PyPES2WaTr mapping file (`pypes_watr_mapping.json`)
@@ -43,12 +56,25 @@ ENUM_KIND_STR = "EnumerationKind"
 # namespace prefixes used in the mapping file's `uri` keys
 REC_URI = "rec"
 
+# PyPES attributes starting with this are internal, so they are not translated
+PRIVATE_ATTR_PREFIX = "_"
+
 # PyPES attributes with custom translation logic
 DIGESTER_TYPE_ATTR = "digester_type"
+# the child node a connection to a network leaves (exit) or enters (entry)
+EXIT_POINT_ATTR = "exit_point"
+ENTRY_POINT_ATTR = "entry_point"
 
 # connection points are named after the connection that uses them
 OUTLET_SUFFIX = "-out"
 INLET_SUFFIX = "-in"
+# plumb's directions for outlet and inlet connection points
+OUTLET_DIRECTION = "out"
+INLET_DIRECTION = "in"
+# plumb names the property a sensor observes `<sensor name>-value`
+SENSOR_VALUE_SUFFIX = "-value"
+# plumb's parameter for the medium some classes (e.g. Junction) need when created
+MEDIUM_PARAM = "medium"
 
 # These attributes are handled by custom logic and not automatically
 CUSTOM_HANDLED_ATTRIBUTES = [
@@ -62,8 +88,8 @@ CUSTOM_HANDLED_ATTRIBUTES = [
     "id",
     "source",
     "destination",
-    "exit_point",
-    "entry_point",
+    EXIT_POINT_ATTR,
+    ENTRY_POINT_ATTR,
 ]
 
 # TODO: implement conversion of the below attributes
@@ -102,6 +128,45 @@ class UnitConversionWarning(UserWarning):
     pass
 
 
+def _load_extensions(path: str):
+    """Read the codec's own WaTr terms and build a plumb enumeration value for each.
+
+    Parameters
+    ----------
+    path : str
+        Turtle file of WaTr enumeration kinds (see `watr_extensions.ttl`).
+        Each term is a `watr:Class` whose `rdfs:subClassOf` superclasses
+        are WaTr or 223P enumeration values that plumb already has.
+
+    Returns
+    -------
+    graph : rdflib.Graph
+        The terms' definitions.
+    values : dict
+        Maps each term's local name (e.g.
+        `"Constituent-VolatileSuspendedSolids"`) to its plumb enumeration
+        value. A value's parents are its superclasses, so plumb accepts it
+        wherever any of them is allowed.
+    """
+    graph = Graph().parse(path, format=TURTLE_FORMAT)
+    values = {}
+    for term in sorted(graph.subjects(RDF.type, WATR_CLASS)):
+        parents = [watr.REGISTRY.resolve_enum(str(p)) for p in sorted(graph.objects(term, RDFS.subClassOf))]
+        value = EnumValue(
+            str(term),
+            label=str(graph.value(term, RDFS.label)),
+            definition=str(graph.value(term, RDFS.comment)),
+            parent=parents[0],
+        )
+        for parent in parents[1:]:
+            value._add_parent(parent)  # plumb's only way to give a value several parents
+        values[term.fragment] = value
+    return graph, values
+
+
+EXTENSION_GRAPH, EXTENSION_ENUMS = _load_extensions(EXTENSIONS_PATH)
+
+
 class PyPES2WaTr:
     """Translates a pype_schema PyPES network into a WaTr semantic graph.
 
@@ -118,8 +183,8 @@ class PyPES2WaTr:
         self,
         network: Network,
         local_prefix: str,
-        mapping_path=WATR_CODEC_DIR + "/data/pypes_watr_mapping.json",
-        namespace: str = "urn:ex/",
+        mapping_path=MAPPING_PATH,
+        namespace: str = DEFAULT_NAMESPACE,
     ):
         """Create a translator bound to a PyPES network and mapping data.
 
@@ -140,7 +205,7 @@ class PyPES2WaTr:
         """
         self.world = network
         self.local_prefix = local_prefix
-        with open(mapping_path, "r", encoding="utf-8") as file:
+        with open(mapping_path, "r", encoding=FILE_ENCODING) as file:
             self.mapping = json.load(file)
 
         self.model = Model(namespace, prefixes={local_prefix: namespace})
@@ -181,6 +246,26 @@ class PyPES2WaTr:
         """
         return name.replace("-", "_")
 
+    def _has_data(self, value) -> bool:
+        """Check whether a PyPES attribute value holds any data.
+
+        Parameters
+        ----------
+        value : object
+            Value of a node or connection attribute. Some are tuples of
+            optional values, e.g. a pipe's `heating_values` of
+            `(lower, higher)`.
+
+        Returns
+        -------
+        bool
+            False if `value` is None or a tuple whose items are all None,
+            otherwise True.
+        """
+        if isinstance(value, tuple):
+            return any(item is not None for item in value)
+        return value is not None
+
     def _class(self, data: dict):
         """Look up the plumb class for a mapping-file `nodes`/`connections` entry.
 
@@ -219,9 +304,37 @@ class PyPES2WaTr:
         Returns
         -------
         plumb enumeration value
-            The corresponding member of `plumb.watr.enums.values`.
+            See `_enum_value`.
         """
-        return getattr(enums.values, self._python_name(data[NAME_KEY]))
+        return self._enum_value(data[NAME_KEY])
+
+    def _enum_value(self, name: str):
+        """Look up a WaTr or 223P enumeration value by its ontology name.
+
+        Parameters
+        ----------
+        name : str
+            Local name from the mapping file, e.g. a medium (`"Water-Brine"`),
+            role (`"Role-Permeate"`), or substance
+            (`"Constituent-SuspendedSolids"`).
+
+        Returns
+        -------
+        plumb enumeration value
+            The corresponding member of `plumb.watr.enums.values`, or else the
+            codec's own term of that name from `watr_extensions.ttl`.
+
+        Raises
+        ------
+        KeyError
+            If neither plumb nor `watr_extensions.ttl` defines `name`.
+        """
+        try:
+            return getattr(enums.values, self._python_name(name))
+        except AttributeError:  # not in plumb, so it should be one of the codec's own terms
+            if name not in EXTENSION_ENUMS:
+                raise KeyError(f"Neither plumb nor watr_extensions.ttl defines {name}") from None
+            return EXTENSION_ENUMS[name]
 
     def _quantity_kind(self, data: dict):
         """Look up the plumb QUDT quantity kind for a mapping-file entry.
@@ -422,8 +535,9 @@ class PyPES2WaTr:
         ------
         ValueError
             If the attribute's quantity kind has dimensions but its value
-            has no units, or units of the wrong dimensions. 223P requires
-            a unit for every quantifiable property with a value.
+            has no units, since 223P requires a unit for every quantifiable
+            property with a value. plumb raises its own ValueError for other
+            problems, e.g. units of the wrong dimensions.
         """
         # there is no reason to add a property without data to the graph
         if value is None:
@@ -445,29 +559,26 @@ class PyPES2WaTr:
             unit_dict = {}
 
         prop_data, is_quant_kind = self.convert_attribute(attr_name)
-        substance = {}
-        if prop_data.get(SUBSTANCE_KEY):
-            substance["of_substance"] = getattr(enums.values, self._python_name(prop_data[SUBSTANCE_KEY]))
+        substance = self._enum_value(prop_data[SUBSTANCE_KEY]) if prop_data.get(SUBSTANCE_KEY) else None
 
         if is_quant_kind:
             kind = self._quantity_kind(prop_data)
-            # 223P requires a quantifiable property's value to have a unit; a plain
-            # number is only complete for dimensionless quantities (e.g. friction)
-            unit = self._unit(unit_dict) or units.UNITLESS
-            try:  # plumb also checks the unit has the quantity kind's dimensions
-                prop = host.quantity(prop_id, value, unit=unit, kind=kind, **substance)
-            except ValueError:
+            # 223P requires a quantifiable property's value to have a unit, so a plain
+            # number is only complete for a dimensionless quantity (e.g. friction)
+            if not unit_dict and kind.dimension_vector not in (None, units.UNITLESS.dimension_vector):
                 raise ValueError(
-                    f"{prop_id} is a {prop_data[NAME_KEY]}, which needs a unit, but its value {value!r} has "
-                    f"{'no units' if unit is units.UNITLESS else 'units of the wrong dimensions'}"
-                ) from None
+                    f"{prop_id} is a {prop_data[NAME_KEY]}, which needs a unit, but its value {value!r} has none"
+                )
+            # plumb checks the rest, e.g. that the unit has the quantity kind's dimensions
+            unit = self._unit(unit_dict) or units.UNITLESS
+            prop = host.quantity(prop_id, value, unit=unit, kind=kind, of_substance=substance)
         else:
             prop = watr.EnumerableProperty(
                 prop_id,
                 has_value=value,
                 has_enumeration_kind=self._enum(prop_data),
+                of_substance=substance,
                 model=self.model,
-                **substance,
             )
             host.has_property.add(prop)
 
@@ -535,24 +646,26 @@ class PyPES2WaTr:
 
         prop_data, is_quant_kind = self.convert_tag_type(tag.tag_type, tag.units)
         kind = self._quantity_kind(prop_data) if is_quant_kind else self._enum(prop_data)
-        observed = {}
-        if tag.contents:
-            # TODO: should Role be applied elsewhere or does it make sense in the property itself?
-            observed["of_medium"] = self._enum(self.convert_contents(tag.contents))
-        if prop_data.get(SUBSTANCE_KEY):
-            observed["of_substance"] = getattr(enums.values, self._python_name(prop_data[SUBSTANCE_KEY]))
+        # TODO: should Role be applied elsewhere or does it make sense in the property itself?
+        medium = self._enum(self.convert_contents(tag.contents)) if tag.contents else None
+        substance = self._enum_value(prop_data[SUBSTANCE_KEY]) if prop_data.get(SUBSTANCE_KEY) else None
 
-        if unit is not None:
-            sensor = host.sensor(tag_id, kind=kind, unit=unit, **observed)
-        elif not is_quant_kind:
-            sensor = host.sensor(tag_id, kind=kind, **observed)
+        if unit is not None or not is_quant_kind:
+            sensor = host.sensor(tag_id, kind=kind, unit=unit, of_medium=medium, of_substance=substance)
         else:
-            # plumb's `sensor()` needs a unit for quantity kinds, so build it by hand
+            # plumb's `sensor()` needs a unit for quantity kinds, so build the sensor by hand,
+            # using the class plumb would pick for its quantity kind (e.g. FlowSensor)
             prop = watr.QuantifiableObservableProperty(
-                f"{tag_id}-value", has_quantity_kind=kind, model=self.model, **observed
+                tag_id + SENSOR_VALUE_SUFFIX,
+                has_quantity_kind=kind,
+                of_medium=medium,
+                of_substance=substance,
+                model=self.model,
             )
             host.has_property.add(prop)
-            sensor = watr.Sensor(tag_id, has_observation_location=host, observes=prop, model=self.model)
+            sensor_class = watr.REGISTRY.sensor_classes.get(kind.iri)
+            sensor_class = watr.REGISTRY.resolve(sensor_class) if sensor_class else watr.Sensor
+            sensor = sensor_class(tag_id, has_observation_location=host, observes=prop, model=self.model)
 
         self.sensors[tag_id] = sensor
         return sensor
@@ -580,13 +693,13 @@ class PyPES2WaTr:
         node_id = self._sanitize_id(node.id)
         node_class = self._class(node_data)
         kwargs = {}
-        medium_param = inspect.signature(node_class).parameters.get("medium")
+        medium_param = inspect.signature(node_class).parameters.get(MEDIUM_PARAM)
         if medium_param is not None and medium_param.default is inspect.Parameter.empty:
             # some classes (e.g. Junction) need their medium when they are created
             media = {self.convert_contents(c)[NAME_KEY]: c for c in node.input_contents + node.output_contents}
             if len(media) != 1:
                 raise ValueError(f"{pypes_class} {node.id} needs exactly one medium, but has {sorted(media)}")
-            kwargs["medium"] = self._enum(self.convert_contents(next(iter(media.values()))))
+            kwargs[MEDIUM_PARAM] = self._enum(self.convert_contents(next(iter(media.values()))))
         with self.model:
             entity = node_class(node_id, **kwargs)
 
@@ -596,9 +709,13 @@ class PyPES2WaTr:
                 entity.has_process.add(process)
 
         for prop_name, prop_val in node.__dict__.items():  # get all attributes
-            if prop_name in CUSTOM_HANDLED_ATTRIBUTES or prop_name.startswith("_"):
-                # ignore internal attributes starting with `_`
-                # and those handled elsewhere (`CUSTOM_HANDLED_ATTRIBUTES`)
+            if (
+                prop_name in CUSTOM_HANDLED_ATTRIBUTES
+                or prop_name.startswith(PRIVATE_ATTR_PREFIX)
+                or not self._has_data(prop_val)
+            ):
+                # ignore internal attributes starting with `_`, those handled
+                # elsewhere (`CUSTOM_HANDLED_ATTRIBUTES`), and those without data
                 pass
             elif prop_name in NOT_YET_IMPLEMENTED_ATTRIBUTES:
                 warnings.warn(
@@ -639,10 +756,10 @@ class PyPES2WaTr:
         conn_id = self._sanitize_id(conn.id)
         conn_data = self.mapping[TOP_LEVEL_KEY][CONNECTIONS_KEY][pypes_class]
 
-        source = self._endpoint(conn.source, conn.exit_point, conn.id, "exit_point")
-        dest = self._endpoint(conn.destination, conn.entry_point, conn.id, "entry_point")
-        outlet = source.port(conn_id + OUTLET_SUFFIX, direction="out")
-        inlet = dest.port(conn_id + INLET_SUFFIX, direction="in")
+        source = self._endpoint(conn.source, conn.exit_point, conn.id, EXIT_POINT_ATTR)
+        dest = self._endpoint(conn.destination, conn.entry_point, conn.id, ENTRY_POINT_ATTR)
+        outlet = source.port(conn_id + OUTLET_SUFFIX, direction=OUTLET_DIRECTION)
+        inlet = dest.port(conn_id + INLET_SUFFIX, direction=INLET_DIRECTION)
 
         medium_dict = self.convert_contents(conn.contents)
         handle = connect(
@@ -654,15 +771,19 @@ class PyPES2WaTr:
         )
         if medium_dict.get(ROLE_KEY):
             # TODO: should Role be applied elsewhere or does it make sense in the connection?
-            handle.has_role.add(getattr(enums.values, self._python_name(medium_dict[ROLE_KEY])))
+            handle.has_role.add(self._enum_value(medium_dict[ROLE_KEY]))
 
         # TODO: add logic to handle source and destination unit IDs
         # TODO: add logic for bidirectional connections
         for prop_name, prop_val in conn.__dict__.items():  # get all attributes
-            if prop_name in CUSTOM_HANDLED_ATTRIBUTES or prop_name.startswith("_"):
+            if (
+                prop_name in CUSTOM_HANDLED_ATTRIBUTES
+                or prop_name.startswith(PRIVATE_ATTR_PREFIX)
+                or not self._has_data(prop_val)
+            ):
                 # TODO: add logic for dictionary attributes (like flow_rate and gen_capacity)
-                # ignore internal attributes starting with `_`
-                # and those handled elsewhere (`CUSTOM_HANDLED_ATTRIBUTES`)
+                # ignore internal attributes starting with `_`, those handled
+                # elsewhere (`CUSTOM_HANDLED_ATTRIBUTES`), and those without data
                 pass
             elif prop_name in NOT_YET_IMPLEMENTED_ATTRIBUTES:
                 warnings.warn(
@@ -707,7 +828,8 @@ class PyPES2WaTr:
         for conn in network.get_all_connections(recurse=False):
             self.translate_connection(conn)
 
-        for tag in network.get_all_tags(recurse=False):
+        # pype_schema returns tags in set order, so sort them for a reproducible translation
+        for tag in sorted(network.get_all_tags(recurse=False), key=lambda tag: tag.id):
             if isinstance(tag, VirtualTag):
                 pass  # TODO: implement VirtualTag to Acquirium soft sensor translator
             elif isinstance(self.entities.get(tag.parent_id), brick.Space):
@@ -725,13 +847,19 @@ class PyPES2WaTr:
         Returns
         -------
         rdflib.Graph
-            The resolved semantic graph for `self.world`. Calling this more
-            than once is safe and returns the same graph without re-running
-            the translation.
+            The resolved semantic graph for `self.world`, including the
+            definition of each of the codec's own WaTr terms it uses (see
+            `watr_extensions.ttl`). Calling this more than once is safe and
+            returns the same graph without re-running the translation.
         """
         if self._graph is None:
             self.translate_network(self.world)
             self._graph = self.model.graph()
+            # the codec's own terms are not in the WaTr ontology the graph
+            # imports, so define the ones it uses in the graph itself
+            for term in set(EXTENSION_GRAPH.subjects()):
+                if (None, None, term) in self._graph:
+                    self._graph += EXTENSION_GRAPH.triples((term, None, None))
         return self._graph
 
     def validate(self):
@@ -741,10 +869,15 @@ class PyPES2WaTr:
         -------
         plumb ValidationReport
             The SHACL validation report against the WaTr, 223P, and QUDT
-            shapes. It is truthy when the model conforms.
+            shapes, plus the codec's own WaTr terms (see
+            `watr_extensions.ttl`). It is truthy when the model conforms.
         """
         self.to_graph()
-        return self.model.validate()
+        # add the codec's own terms to the shapes plumb would use by default,
+        # so they are recognized like the WaTr ontology's terms
+        shapes = _package_shapes(self.model)
+        shapes += EXTENSION_GRAPH
+        return self.model.validate(shapes)
 
     def export_ttl(self, outpath):
         """Translate the facility and write the resulting graph as Turtle.
@@ -755,5 +888,5 @@ class PyPES2WaTr:
             Path to write the serialized Turtle (`.ttl`) file to.
         """
         graph = self.to_graph()
-        with open(outpath, "w", encoding="utf-8") as file:
-            file.write(graph.serialize(format="turtle"))
+        with open(outpath, "w", encoding=FILE_ENCODING) as file:
+            file.write(graph.serialize(format=TURTLE_FORMAT))

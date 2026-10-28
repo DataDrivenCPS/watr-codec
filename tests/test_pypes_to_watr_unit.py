@@ -8,8 +8,8 @@ end-to-end tests that exercise the full desalination.json pipeline live in
 test_pypes_to_watr_e2e.py.
 """
 
+import inspect
 import json
-import os
 import warnings
 
 import pytest
@@ -26,7 +26,7 @@ from pype_schema.tag import Tag, TagType
 from pype_schema.units import u
 from pype_schema.utils import ContentsType, DigesterType, PumpType, parse_quantity, parse_units
 
-from watr_codec.pypes_to_watr import WATR_CODEC_DIR, NotImplementedWarning, PyPES2WaTr, UnitConversionWarning
+from watr_codec.pypes_to_watr import MAPPING_PATH, NotImplementedWarning, PyPES2WaTr, UnitConversionWarning
 
 LOCAL = Namespace("urn:ex/")
 S223 = Namespace("http://data.ashrae.org/standard223#")
@@ -37,21 +37,26 @@ UNIT = Namespace("http://qudt.org/vocab/unit/")
 REC = Namespace("https://w3id.org/rec#")
 BRICK = Namespace("https://brickschema.org/schema/Brick#")
 
-with open(os.path.join(WATR_CODEC_DIR, "data", "pypes_watr_mapping.json"), encoding="utf-8") as file:
+with open(MAPPING_PATH, encoding="utf-8") as file:
     MAPPING = json.load(file)["PyPES2WaTr"]
 
-# Every non-placeholder node and connection entry. PRV is mapped to the 223P
-# class it should be, which plumb does not have yet; the strict xfail flags
-# this test as soon as plumb adds it.
+# PRV is mapped to the 223P class it should be, which plumb does not have yet;
+# the strict xfail flags these tests as soon as plumb adds it.
+PRV_MISSING_FROM_PLUMB = pytest.mark.xfail(strict=True, reason="plumb has no PressureReducingValve class")
+
+# Every non-placeholder node and connection entry in the mapping file.
 MAPPED_CLASSES = [
-    pytest.param(
-        section,
-        key,
-        marks=pytest.mark.xfail(strict=True, reason="plumb has no PressureReducingValve class") if key == "PRV" else (),
-    )
+    pytest.param(section, key, marks=PRV_MISSING_FROM_PLUMB if key == "PRV" else ())
     for section in ("nodes", "connections")
     for key, data in MAPPING[section].items()
     if data
+]
+
+# Every pype_schema node class other than networks, which become rec spaces.
+PYPES_NODE_CLASSES = [
+    pytest.param(cls, id=cls.__name__, marks=PRV_MISSING_FROM_PLUMB if cls.__name__ == "PRV" else ())
+    for cls in vars(pypes_node).values()
+    if isinstance(cls, type) and issubclass(cls, Node) and cls is not Node and not issubclass(cls, Network)
 ]
 
 
@@ -126,6 +131,19 @@ def make_pump(id_="Pump1"):
         num_units=1,
         pump_type=PumpType.Constant,
     )
+
+
+def make_node(node_class, id_="Node1"):
+    """Build a real node of any pype_schema class, carrying brine and no other data."""
+    args = {}
+    for name, param in list(inspect.signature(node_class.__init__).parameters.items())[1:]:
+        if name == "id":
+            args[name] = id_
+        elif name in ("input_contents", "output_contents"):
+            args[name] = ContentsType.Brine
+        elif param.default is inspect.Parameter.empty:
+            args[name] = None
+    return node_class(**args)
 
 
 def translated(converter, *nodes, connections=(), tags=()):
@@ -317,11 +335,19 @@ class TestMappingFile:
 
     @pytest.mark.parametrize("section, key", MAPPED_CLASSES)
     def test_mapped_class_and_process_exist_in_plumb(self, converter, section, key):
-        """Every class (and process) in the mapping file should be one plumb has."""
+        """Every class in the mapping file should be one plumb has, and every
+        process a WaTr process (not, e.g., a deprecated designation)."""
         data = MAPPING[section][key]
         converter._class(data)
         if data.get("process"):
-            assert hasattr(watr, converter._python_name(data["process"]))
+            assert issubclass(getattr(watr, converter._python_name(data["process"])), watr.Process)
+
+    @pytest.mark.parametrize("node_class", PYPES_NODE_CLASSES)
+    def test_every_pypes_node_class_translates(self, converter, node_class):
+        """A real node of every pype_schema class should translate, including those
+        whose WaTr class requires a process when it is created (e.g. Reactor)."""
+        graph = translated(converter, make_node(node_class))
+        assert (LOCAL["Node1"], RDF.type, None) in graph
 
     def test_mapped_enumeration_values_exist(self, converter):
         """Every medium, role, substance, digester type, and enumeration kind should
@@ -584,6 +610,24 @@ class TestTranslateNode:
 
         assert (LOCAL["Digester1"], WATR["hasProcess"], WATR["Process-Digestion"]) in graph
         assert not list(graph.objects(LOCAL["Digester1"], S223["hasRole"]))
+
+    @pytest.mark.parametrize(
+        "node_class, process",
+        [
+            # a generic reactor or disinfection unit doesn't say which process it uses
+            (pypes_node.Reactor, "Process"),
+            (pypes_node.Disinfection, "Process"),
+            (pypes_node.Thickening, "Process-SolidLiquidSeparation"),
+            # WaTr deprecated Process-Sedimentation and Process-UVDisinfection for these
+            (pypes_node.Clarification, "Process-Settling"),
+            (pypes_node.UVSystem, "Process-UVIrradiation"),
+        ],
+        ids=lambda value: value if isinstance(value, str) else value.__name__,
+    )
+    def test_node_gets_exactly_its_mapped_process(self, converter, node_class, process):
+        """A node should have its mapped WaTr process, and no duplicate from its class's default."""
+        graph = translated(converter, make_node(node_class))
+        assert set(graph.objects(LOCAL["Node1"], WATR["hasProcess"])) == {WATR[process]}
 
 
 # --------- translate_connection ---------

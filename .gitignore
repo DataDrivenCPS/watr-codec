@@ -1,0 +1,18 @@
+# Build and Release Folders
+bin-debug/
+bin-release/
+[Oo]bj/
+[Bb]in/
+__pycache__
+*egg-info
+_build
+build
+
+# Other files and folders
+.settings/
+Icon?
+*.log
+Pipfile
+Pipfile.lock
+.vscode
+.DS_Store

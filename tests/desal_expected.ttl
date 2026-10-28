@@ -1,0 +1,282 @@
+@prefix dsl: <urn:ex/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix quantitykind: <http://qudt.org/vocab/quantitykind/> .
+@prefix qudt: <http://qudt.org/schema/qudt/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix s223: <http://data.ashrae.org/standard223#> .
+@prefix unit: <http://qudt.org/vocab/unit/> .
+@prefix watr: <https://watermetadata.org/ontology/watr#> .
+
+<urn:ex> a owl:Ontology ;
+    owl:imports <http://qudt.org/3.4.0/qudt-all>,
+        <https://watermetadata.org/ontology/watr> .
+
+dsl:AIT_400_001A_P.PV a watr:ConductivitySensor ;
+    rdfs:label "AIT_400_001A_P.PV" ;
+    s223:hasObservationLocation dsl:SWROToOutput ;
+    s223:observes dsl:AIT_400_001A_P.PV-value .
+
+dsl:FIT_400_001A_P.PV a watr:FlowSensor ;
+    rdfs:label "FIT_400_001A_P.PV" ;
+    s223:hasObservationLocation dsl:ERIToWasewaterSump ;
+    s223:observes dsl:FIT_400_001A_P.PV-value .
+
+dsl:FIT_400_002A_P.PV a watr:FlowSensor ;
+    rdfs:label "FIT_400_002A_P.PV" ;
+    s223:hasObservationLocation dsl:SWROToOutput ;
+    s223:observes dsl:FIT_400_002A_P.PV-value .
+
+dsl:PDIT_400_002A_P.PV a watr:PressureSensor ;
+    rdfs:label "PDIT_400_002A_P.PV" ;
+    s223:hasObservationLocation dsl:CirculationPump ;
+    s223:observes dsl:PDIT_400_002A_P.PV-value .
+
+dsl:PIT_400_003A_P.PV a watr:PressureSensor ;
+    rdfs:label "PIT_400_003A_P.PV" ;
+    s223:hasObservationLocation dsl:HPPump ;
+    s223:observes dsl:PIT_400_003A_P.PV-value .
+
+dsl:P_400_001A_P.RPM_MV a s223:Sensor ;
+    rdfs:label "P_400_001A_P.RPM_MV" ;
+    s223:hasObservationLocation dsl:CirculationPump ;
+    s223:observes dsl:P_400_001A_P.RPM_MV-value .
+
+dsl:P_400_002A_P.RPM_MV a s223:Sensor ;
+    rdfs:label "P_400_002A_P.RPM_MV" ;
+    s223:hasObservationLocation dsl:HPPump ;
+    s223:observes dsl:P_400_002A_P.RPM_MV-value .
+
+<https://watermetadata.org/ontology/watr> owl:versionInfo "0.3.rc1" .
+
+dsl:Output a watr:Tank ;
+    rdfs:label "Output" ;
+    s223:hasConnectionPoint dsl:SWROToOutput-in .
+
+dsl:WasteWaterSump a watr:Tank ;
+    rdfs:label "WasteWaterSump" ;
+    s223:hasConnectionPoint dsl:ERIToWasewaterSump-in .
+
+dsl:AIT_400_001A_P.PV-value a s223:QuantifiableObservableProperty ;
+    rdfs:label "AIT_400_001A_P.PV-value" ;
+    s223:ofMedium watr:Water-Brine ;
+    qudt:hasQuantityKind quantitykind:ElectricConductivity ;
+    qudt:hasUnit unit:MicroS-PER-CentiM .
+
+dsl:CirculationPumpToSWRO a s223:Pipe ;
+    rdfs:label "CirculationPumpToSWRO" ;
+    s223:connectsAt dsl:CirculationPumpToSWRO-in,
+        dsl:CirculationPumpToSWRO-out ;
+    s223:hasMedium watr:Water-Brine .
+
+dsl:CirculationPumpToSWRO-in a s223:InletConnectionPoint ;
+    rdfs:label "CirculationPumpToSWRO-in" ;
+    s223:connectsThrough dsl:CirculationPumpToSWRO ;
+    s223:hasMedium watr:Water-Brine ;
+    s223:isConnectionPointOf dsl:SWRO .
+
+dsl:CirculationPumpToSWRO-out a s223:OutletConnectionPoint ;
+    rdfs:label "CirculationPumpToSWRO-out" ;
+    s223:connectsThrough dsl:CirculationPumpToSWRO ;
+    s223:hasMedium watr:Water-Brine ;
+    s223:isConnectionPointOf dsl:CirculationPump .
+
+dsl:ERIToCirculationPump a s223:Pipe ;
+    rdfs:label "ERIToCirculationPump" ;
+    s223:connectsAt dsl:ERIToCirculationPump-in,
+        dsl:ERIToCirculationPump-out ;
+    s223:hasMedium watr:Water-Brine .
+
+dsl:ERIToCirculationPump-in a s223:InletConnectionPoint ;
+    rdfs:label "ERIToCirculationPump-in" ;
+    s223:connectsThrough dsl:ERIToCirculationPump ;
+    s223:hasMedium watr:Water-Brine ;
+    s223:isConnectionPointOf dsl:CirculationPump .
+
+dsl:ERIToCirculationPump-out a s223:OutletConnectionPoint ;
+    rdfs:label "ERIToCirculationPump-out" ;
+    s223:connectsThrough dsl:ERIToCirculationPump ;
+    s223:hasMedium watr:Water-Brine ;
+    s223:isConnectionPointOf dsl:ERI .
+
+dsl:ERIToWasewaterSump-in a s223:InletConnectionPoint ;
+    rdfs:label "ERIToWasewaterSump-in" ;
+    s223:connectsThrough dsl:ERIToWasewaterSump ;
+    s223:hasMedium watr:Water-Brine ;
+    s223:isConnectionPointOf dsl:WasteWaterSump .
+
+dsl:ERIToWasewaterSump-out a s223:OutletConnectionPoint ;
+    rdfs:label "ERIToWasewaterSump-out" ;
+    s223:connectsThrough dsl:ERIToWasewaterSump ;
+    s223:hasMedium watr:Water-Brine ;
+    s223:isConnectionPointOf dsl:ERI .
+
+dsl:FIT_400_001A_P.PV-value a s223:QuantifiableObservableProperty ;
+    rdfs:label "FIT_400_001A_P.PV-value" ;
+    s223:ofMedium watr:Water-Brine ;
+    qudt:hasQuantityKind quantitykind:VolumeFlowRate ;
+    qudt:hasUnit unit:GAL_US-PER-MIN .
+
+dsl:FIT_400_002A_P.PV-value a s223:QuantifiableObservableProperty ;
+    rdfs:label "FIT_400_002A_P.PV-value" ;
+    s223:ofMedium watr:Water-Brine ;
+    qudt:hasQuantityKind quantitykind:VolumeFlowRate ;
+    qudt:hasUnit unit:GAL_US-PER-MIN .
+
+dsl:HPPumpToSWRO a s223:Pipe ;
+    rdfs:label "HPPumpToSWRO" ;
+    s223:connectsAt dsl:HPPumpToSWRO-in,
+        dsl:HPPumpToSWRO-out ;
+    s223:hasMedium watr:Water-Brine .
+
+dsl:HPPumpToSWRO-in a s223:InletConnectionPoint ;
+    rdfs:label "HPPumpToSWRO-in" ;
+    s223:connectsThrough dsl:HPPumpToSWRO ;
+    s223:hasMedium watr:Water-Brine ;
+    s223:isConnectionPointOf dsl:SWRO .
+
+dsl:HPPumpToSWRO-out a s223:OutletConnectionPoint ;
+    rdfs:label "HPPumpToSWRO-out" ;
+    s223:connectsThrough dsl:HPPumpToSWRO ;
+    s223:hasMedium watr:Water-Brine ;
+    s223:isConnectionPointOf dsl:HPPump .
+
+dsl:Input a watr:Tank ;
+    rdfs:label "Input" ;
+    s223:hasConnectionPoint dsl:InputToERI-out,
+        dsl:InputToHPPump-out .
+
+dsl:InputToERI a s223:Pipe ;
+    rdfs:label "InputToERI" ;
+    s223:connectsAt dsl:InputToERI-in,
+        dsl:InputToERI-out ;
+    s223:hasMedium watr:Water-Brine .
+
+dsl:InputToERI-in a s223:InletConnectionPoint ;
+    rdfs:label "InputToERI-in" ;
+    s223:connectsThrough dsl:InputToERI ;
+    s223:hasMedium watr:Water-Brine ;
+    s223:isConnectionPointOf dsl:ERI .
+
+dsl:InputToERI-out a s223:OutletConnectionPoint ;
+    rdfs:label "InputToERI-out" ;
+    s223:connectsThrough dsl:InputToERI ;
+    s223:hasMedium watr:Water-Brine ;
+    s223:isConnectionPointOf dsl:Input .
+
+dsl:InputToHPPump a s223:Pipe ;
+    rdfs:label "InputToHPPump" ;
+    s223:connectsAt dsl:InputToHPPump-in,
+        dsl:InputToHPPump-out ;
+    s223:hasMedium watr:Water-Brine .
+
+dsl:InputToHPPump-in a s223:InletConnectionPoint ;
+    rdfs:label "InputToHPPump-in" ;
+    s223:connectsThrough dsl:InputToHPPump ;
+    s223:hasMedium watr:Water-Brine ;
+    s223:isConnectionPointOf dsl:HPPump .
+
+dsl:InputToHPPump-out a s223:OutletConnectionPoint ;
+    rdfs:label "InputToHPPump-out" ;
+    s223:connectsThrough dsl:InputToHPPump ;
+    s223:hasMedium watr:Water-Brine ;
+    s223:isConnectionPointOf dsl:Input .
+
+dsl:PDIT_400_002A_P.PV-value a s223:QuantifiableObservableProperty ;
+    rdfs:label "PDIT_400_002A_P.PV-value" ;
+    s223:ofMedium watr:Water-Brine ;
+    qudt:hasQuantityKind quantitykind:Pressure ;
+    qudt:hasUnit unit:PSI .
+
+dsl:PIT_400_003A_P.PV-value a s223:QuantifiableObservableProperty ;
+    rdfs:label "PIT_400_003A_P.PV-value" ;
+    s223:ofMedium watr:Water-Brine ;
+    qudt:hasQuantityKind quantitykind:Pressure ;
+    qudt:hasUnit unit:PSI .
+
+dsl:P_400_001A_P.RPM_MV-value a s223:QuantifiableObservableProperty ;
+    rdfs:label "P_400_001A_P.RPM_MV-value" ;
+    s223:ofMedium watr:Water-Brine ;
+    qudt:hasQuantityKind quantitykind:RotationalVelocity ;
+    qudt:hasUnit unit:HZ .
+
+dsl:P_400_002A_P.RPM_MV-value a s223:QuantifiableObservableProperty ;
+    rdfs:label "P_400_002A_P.RPM_MV-value" ;
+    s223:ofMedium watr:Water-Brine ;
+    qudt:hasQuantityKind quantitykind:RotationalVelocity ;
+    qudt:hasUnit unit:HZ .
+
+dsl:SWROToERI a s223:Pipe ;
+    rdfs:label "SWROToERI" ;
+    s223:connectsAt dsl:SWROToERI-in,
+        dsl:SWROToERI-out ;
+    s223:hasMedium watr:Water-Brine .
+
+dsl:SWROToERI-in a s223:InletConnectionPoint ;
+    rdfs:label "SWROToERI-in" ;
+    s223:connectsThrough dsl:SWROToERI ;
+    s223:hasMedium watr:Water-Brine ;
+    s223:isConnectionPointOf dsl:ERI .
+
+dsl:SWROToERI-out a s223:OutletConnectionPoint ;
+    rdfs:label "SWROToERI-out" ;
+    s223:connectsThrough dsl:SWROToERI ;
+    s223:hasMedium watr:Water-Brine ;
+    s223:isConnectionPointOf dsl:SWRO .
+
+dsl:SWROToOutput-in a s223:InletConnectionPoint ;
+    rdfs:label "SWROToOutput-in" ;
+    s223:connectsThrough dsl:SWROToOutput ;
+    s223:hasMedium s223:Fluid-Water ;
+    s223:isConnectionPointOf dsl:Output .
+
+dsl:SWROToOutput-out a s223:OutletConnectionPoint ;
+    rdfs:label "SWROToOutput-out" ;
+    s223:connectsThrough dsl:SWROToOutput ;
+    s223:hasMedium s223:Fluid-Water ;
+    s223:isConnectionPointOf dsl:SWRO .
+
+dsl:ERIToWasewaterSump a s223:Pipe ;
+    rdfs:label "ERIToWasewaterSump" ;
+    s223:connectsAt dsl:ERIToWasewaterSump-in,
+        dsl:ERIToWasewaterSump-out ;
+    s223:hasMedium watr:Water-Brine ;
+    s223:hasProperty dsl:FIT_400_001A_P.PV-value .
+
+dsl:CirculationPump a watr:Pump ;
+    rdfs:label "CirculationPump" ;
+    s223:hasConnectionPoint dsl:CirculationPumpToSWRO-out,
+        dsl:ERIToCirculationPump-in ;
+    s223:hasProperty dsl:PDIT_400_002A_P.PV-value,
+        dsl:P_400_001A_P.RPM_MV-value .
+
+dsl:ERI a watr:Pump ;
+    rdfs:label "ERI" ;
+    s223:hasConnectionPoint dsl:ERIToCirculationPump-out,
+        dsl:ERIToWasewaterSump-out,
+        dsl:InputToERI-in,
+        dsl:SWROToERI-in .
+
+dsl:HPPump a watr:Pump ;
+    rdfs:label "HPPump" ;
+    s223:hasConnectionPoint dsl:HPPumpToSWRO-out,
+        dsl:InputToHPPump-in ;
+    s223:hasProperty dsl:PIT_400_003A_P.PV-value,
+        dsl:P_400_002A_P.RPM_MV-value .
+
+dsl:SWRO a watr:ReverseOsmosisMembrane ;
+    rdfs:label "SWRO" ;
+    s223:hasConnectionPoint dsl:CirculationPumpToSWRO-in,
+        dsl:HPPumpToSWRO-in,
+        dsl:SWROToERI-out,
+        dsl:SWROToOutput-out ;
+    watr:hasProcess watr:Process-ReverseOsmosis .
+
+dsl:SWROToOutput a s223:Pipe ;
+    rdfs:label "SWROToOutput" ;
+    s223:connectsAt dsl:SWROToOutput-in,
+        dsl:SWROToOutput-out ;
+    s223:hasMedium s223:Fluid-Water ;
+    s223:hasProperty dsl:AIT_400_001A_P.PV-value,
+        dsl:FIT_400_002A_P.PV-value ;
+    s223:hasRole watr:Role-Permeate .
+

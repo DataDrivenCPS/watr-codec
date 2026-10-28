@@ -73,8 +73,10 @@ OUTLET_DIRECTION = "out"
 INLET_DIRECTION = "in"
 # plumb names the property a sensor observes `<sensor name>-value`
 SENSOR_VALUE_SUFFIX = "-value"
-# plumb's parameter for the medium some classes (e.g. Junction) need when created
+# plumb's parameters for what some classes need when created: the medium of
+# e.g. a Junction, and the processes of e.g. a Reactor
 MEDIUM_PARAM = "medium"
+HAS_PROCESS_PARAM = "has_process"
 
 # These attributes are handled by custom logic and not automatically
 CUSTOM_HANDLED_ATTRIBUTES = [
@@ -677,11 +679,12 @@ class PyPES2WaTr:
         ----------
         node : pype_schema.node.Node
             Node to translate. Its class name is used to look up the
-            corresponding plumb class in the mapping file; any process the
-            mapping declares is added unless the class already has it, a
-            digester's type becomes a role, and any remaining attributes are
-            translated via `translate_attribute`. Connection points are
-            created later, by `translate_connection`.
+            corresponding plumb class in the mapping file. Any process the
+            mapping declares is given to it when it is created (some WaTr
+            classes, e.g. Reactor, require one), a digester's type becomes a
+            role, and any remaining attributes are translated via
+            `translate_attribute`. Connection points are created later, by
+            `translate_connection`.
 
         Returns
         -------
@@ -693,6 +696,9 @@ class PyPES2WaTr:
         node_id = self._sanitize_id(node.id)
         node_class = self._class(node_data)
         kwargs = {}
+        if node_data.get(PROCESS_KEY):
+            # plumb checks required processes (e.g. a Reactor's) as soon as the entity is created
+            kwargs[HAS_PROCESS_PARAM] = [getattr(watr, self._python_name(node_data[PROCESS_KEY]))]
         medium_param = inspect.signature(node_class).parameters.get(MEDIUM_PARAM)
         if medium_param is not None and medium_param.default is inspect.Parameter.empty:
             # some classes (e.g. Junction) need their medium when they are created
@@ -702,11 +708,6 @@ class PyPES2WaTr:
             kwargs[MEDIUM_PARAM] = self._enum(self.convert_contents(next(iter(media.values()))))
         with self.model:
             entity = node_class(node_id, **kwargs)
-
-        if node_data.get(PROCESS_KEY):
-            process = getattr(watr, self._python_name(node_data[PROCESS_KEY]))
-            if process not in entity.has_process:
-                entity.has_process.add(process)
 
         for prop_name, prop_val in node.__dict__.items():  # get all attributes
             if (
@@ -756,19 +757,15 @@ class PyPES2WaTr:
         conn_id = self._sanitize_id(conn.id)
         conn_data = self.mapping[TOP_LEVEL_KEY][CONNECTIONS_KEY][pypes_class]
 
+        medium_dict = self.convert_contents(conn.contents)
+        medium = self._enum(medium_dict)
         source = self._endpoint(conn.source, conn.exit_point, conn.id, EXIT_POINT_ATTR)
         dest = self._endpoint(conn.destination, conn.entry_point, conn.id, ENTRY_POINT_ATTR)
-        outlet = source.port(conn_id + OUTLET_SUFFIX, direction=OUTLET_DIRECTION)
-        inlet = dest.port(conn_id + INLET_SUFFIX, direction=INLET_DIRECTION)
-
-        medium_dict = self.convert_contents(conn.contents)
-        handle = connect(
-            outlet,
-            inlet,
-            name=conn_id,
-            medium=self._enum(medium_dict),
-            connection=self._class(conn_data),
-        )
+        # give each point the connection's medium, or plumb limits it to the media its
+        # equipment's class expects (e.g. a pump's fluid inlets would rule out a Wire)
+        outlet = source.port(conn_id + OUTLET_SUFFIX, direction=OUTLET_DIRECTION, medium=medium)
+        inlet = dest.port(conn_id + INLET_SUFFIX, direction=INLET_DIRECTION, medium=medium)
+        handle = connect(outlet, inlet, name=conn_id, medium=medium, connection=self._class(conn_data))
         if medium_dict.get(ROLE_KEY):
             # TODO: should Role be applied elsewhere or does it make sense in the connection?
             handle.has_role.add(self._enum_value(medium_dict[ROLE_KEY]))

@@ -44,6 +44,7 @@
             "Reactor": {
                 "name": "Reactor",
                 "uri": "watr",
+                "process": "Process",
                 "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/ontology/equipment.ttl"
             },
             "StaticMixing": {
@@ -80,7 +81,7 @@
             "Clarification": {
                 "name": "SedimentationTank",
                 "uri": "watr",
-                "process": "Process-Sedimentation",
+                "process": "Process-Settling",
                 "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/ontology/equipment.ttl"
             },
             "Filtration": {
@@ -109,7 +110,7 @@
             "Thickening": {
                 "name": "Thickener",
                 "uri": "watr",
-                "process": "Process-Thickening",
+                "process": "Process-SolidLiquidSeparation",
                 "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/ontology/equipment.ttl"
             },
             "Aeration": {
@@ -120,7 +121,7 @@
             "Disinfection": {
                 "name": "DisinfectionUnit",
                 "uri": "watr",
-                "process": "Process-Disinfection",
+                "process": "Process",
                 "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/ontology/equipment.ttl"
             },
             "Chlorination": {
@@ -132,7 +133,7 @@
             "UVSystem": {
                 "name": "UltravioletLightUnit",
                 "uri": "watr",
-                "process": "Process-UVDisinfection",
+                "process": "Process-UVIrradiation",
                 "reference": "https://github.com/DataDrivenCPS/water-ontology/blob/main/ontology/equipment.ttl"
             },
             "Flaring": {

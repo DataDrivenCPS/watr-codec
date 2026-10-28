@@ -243,17 +243,20 @@ def test_desalination_output_matches_reviewed_translation(converter, tmp_path):
     """The translated facility should be exactly the reviewed graph in
     desal_expected.ttl, so any change to the codec's output is caught.
 
-    If that file is missing, or UPDATE_EXPECTED_TTL is set, it is written from
-    the current output instead and the test is skipped.
+    If UPDATE_EXPECTED_TTL is set, the file is written from the current output
+    instead and the test is skipped.
     """
     outpath = tmp_path / "desal.ttl"
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         converter.export_ttl(str(outpath))
 
-    if os.environ.get("UPDATE_EXPECTED_TTL") or not os.path.exists(DESAL_EXPECTED_TTL_PATH):
+    if os.environ.get("UPDATE_EXPECTED_TTL"):
         shutil.copyfile(outpath, DESAL_EXPECTED_TTL_PATH)
         pytest.skip(f"wrote {DESAL_EXPECTED_TTL_PATH}; review it before committing")
+    assert os.path.exists(DESAL_EXPECTED_TTL_PATH), (
+        "desal_expected.ttl is missing; create it with UPDATE_EXPECTED_TTL=1, review it, and commit it"
+    )
 
     # parse both files so each side goes through the same Turtle round trip
     actual = to_isomorphic(Graph().parse(str(outpath), format="turtle"))
